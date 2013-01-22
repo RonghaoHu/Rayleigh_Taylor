@@ -1,5 +1,9 @@
 Rayleigh_Taylor
 ===============
-This is an inviscid hydrodynamics solver making use of HLL Rieman Solver. 
+This is an parallel implemention of compressible inviscid fluid solver
+on Graphics Processing Units using NVIDIA's CUDA. 
 Contributed by NYU graduate student:
-Xiaoyi Xie, Yu Guo, Xinwei Li.
+Xiaoyi Xie, Xinwei Li, Yu Guo.
+
+Also it's the final project for NYU Fall 12 Course--High Performance Computing.
+
