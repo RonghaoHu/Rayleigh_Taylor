@@ -7,9 +7,9 @@
 #define PI    3.14159265
 #define G     .1
 #define GAMMA 1.4
-#define X 32
-#define Y 32
-#define Z 96
+#define X 200
+#define Y 2
+#define Z 200
 #define XMIN -.25
 #define XMAX .25
 #define YMIN -.25
@@ -17,7 +17,7 @@
 #define ZMIN -.75
 #define ZMAX .75
 #define THETA 2.0
-#define tmax 15
+#define tmax 12
 
 void Grid(double *gridX, double *gridY, double *gridZ) {
   *gridX = (XMAX - XMIN) / (X - 1);
@@ -41,6 +41,33 @@ double minmod(double x, double y, double z) {		// The minmod function, described
   return M;
 }
 
+double GradientX(double *phys, int N, int L, int O, double dx) {
+  if (N < L*Y*Z) {
+    return (phys[N+L*Y*Z+O]-phys[N+(X-1)*L*Y*Z+O])/dx;
+  }
+  else if (N >= (X-1)*L*Y*Z) {
+    return (phys[N-(X-1)*L*Y*Z+O]-phys[N-L*Y*Z+O])/dx;
+  }
+  else {
+    return (phys[N+L*Y*Z+O]-phys[N-L*Y*Z+O])/dx;
+  }
+}
+
+double GradientY(double *phys, int N, int L, int O, double dy) {
+  if (N%(L*Y*Z) < L*Z) {
+    return (phys[N+L*Z+O]-phys[N+(Y-1)*L*Z+O])/dy;
+  }
+  else if (N%(L*Y*Z) >= (Y-1)*L*Z) {
+    return (phys[N-(Y-1)*L*Z+O]-phys[N-L*Z+O])/dy;
+  }
+  else {
+    return (phys[N+L*Z+O]-phys[N-L*Z+O])/dy;
+  }
+}
+
+double GradientZ(double *phys, int N, int L, int O, double dz) {
+  return (phys[N+L+O]-phys[N-L+O])/dz;
+}
 
 // Given the density, speed and pressure, we calculate the flux F:
 void FluxCalcPX(double *FX, double *phys, int N) {
@@ -206,6 +233,72 @@ void init_water_oil_3d(double *physical) {
             }
         }
     }
+}
+
+void init_B_field(double *B) {
+    int i=0, j=0, k=0, N;
+    for (i=0;i<X;i++) {
+        for (j=0;j<Y;j++) {
+            for (k=0;k<Z;k++) {
+                N = 3	 * (i*Y*Z + j*Z + k);
+                
+                B[N] = 0.0;
+                B[N+1] = 0.0;
+                B[N+2] = 0.0;
+            }
+        }
+    }
+}
+
+void AdvanceB(double *B, double *phys, double dt) {
+  double *E = (double *) malloc (3*X*Y*Z*sizeof(double));
+  double dx, dy, dz;
+  double mu = 4*3.1415926536e-7, ee = 6.02e23 * 1.6e-19;
+  int i, j, k, N1, N2;
+  Grid (&dx, &dy, &dz);
+  
+  for (i = 0; i < X; i++) {
+    for (j = 0; j < Y; j++) {
+      for (k = 1; k < Z - 1; k++) {
+        N1 = i * 3 * Y * Z + j * 3 * Z + k * 3;
+        N2 = i * 5 * Y * Z + j * 5 * Z + k * 5;
+        E[N1] = (GradientX(phys,N2,5,4,dx)-(B[N1+2]*GradientZ(B,N1,3,0,dz)-B[N1+2]*GradientX(B,N1,3,2,dx)-B[N1+1]*GradientX(B,N1,3,1,dx)+B[N1+1]*GradientY(B,N1,3,0,dy))/mu)/(phys[N2]*ee)+phys[N2+2]*B[N1+2]-phys[N2+3]*B[N1+1];
+        E[N1+1] = (GradientY(phys,N2,5,4,dy)-(B[N1]*GradientX(B,N1,3,1,dx)-B[N1]*GradientY(B,N1,3,0,dy)-B[N1+2]*GradientY(B,N1,3,2,dy)+B[N1+2]*GradientZ(B,N1,3,1,dz))/mu)/(phys[N2]*ee)+phys[N2+3]*B[N1]-phys[N2+1]*B[N1+2];
+        E[N1+2] = (GradientZ(phys,N2,5,4,dz)-(B[N1+1]*GradientY(B,N1,3,2,dy)-B[N1+1]*GradientZ(B,N1,3,1,dz)-B[N1]*GradientZ(B,N1,3,0,dz)+B[N1]*GradientX(B,N1,3,2,dx))/mu)/(phys[N2]*ee)+phys[N2+1]*B[N1+1]-phys[N2+2]*B[N1];
+      }
+    }
+  }
+  for (i = 0; i < X; i++) {
+    for (j = 0; j < Y; j++) {
+      { 
+        k = 0;
+        N1 = i * 3 * Y * Z + j * 3 * Z + k * 3;
+        E[N1] = 0.0;
+        E[N1+1] = 0.0;
+        E[N1+2] = 0.0;
+      }
+      { 
+        k = Z-1;
+        N1 = i * 3 * Y * Z + j * 3 * Z + k * 3;
+        E[N1] = 0.0;
+        E[N1+1] = 0.0;
+        E[N1+2] = 0.0;
+      }
+    }
+  }
+
+  for (i = 0; i < X; i++) {
+    for (j = 0; j < Y; j++) {
+      for (k = 1; k < Z - 1; k++) {
+        N1 = i * 3 * Y * Z + j * 3 * Z + k * 3;
+        B[N1] = B[N1] + dt * (GradientY(E,N1,3,2,dy) - GradientZ(E,N1,3,1,dz));
+        B[N1+1] = B[N1+1] + dt * (GradientZ(E,N1,3,0,dz) - GradientX(E,N1,3,2,dx));
+        B[N1+2] = B[N1+2] + dt * (GradientX(E,N1,3,1,dx) - GradientY(E,N1,3,0,dy));
+      }
+    }
+  }
+  
+  free(E);
 }
 
 // Calculates the flux at a half integer coordinate using the riemann method.
@@ -587,7 +680,7 @@ void Fluxsource (double *Source, double *U, double *dt) {
 }
 
 // Advances the function in time:
-void Advance(double *U_new,double *U_old, double *dt) {
+void Advance(double *U_new,double *U_old, double *B, double *dt) {
   int i=0, j=0, k=0, l=0, N;								// counters
 
   double *phys   = (double*) malloc (5*(X)*(Y)*(Z)*sizeof (double));
@@ -683,6 +776,10 @@ void Advance(double *U_new,double *U_old, double *dt) {
     }
   }
 
+  Ucalcinv(phys, U_new, X*Y*Z);
+
+  AdvanceB(B, phys, *dt);
+
   Grid(&GridRatioX, &GridRatioY, &GridRatioZ);
 
   double dtX = 0.3 * GridRatioX / maxX;
@@ -754,7 +851,7 @@ void output_file1(double *U, double t, int stat) {
 }
 
   
-void output_file2(double *U,double t){
+void output_file2(double *U, double *B, double t){
 
   int i=0, j, k, N;
   double xstep, ystep, zstep;
@@ -788,7 +885,8 @@ void output_file2(double *U,double t){
       j = Y/2;
       N = Sx*i+Sy*j+Sz*k;
       fprintf(dens , "%f\t",phys[N]);
-      fprintf(vel  , "%f\t",phys[N+3]);
+      fprintf(vel , "%f\t",B[i*3*Y*Z+j*3*Z+k*3+1]);
+      //fprintf(vel  , "%f\t",phys[N+3]);
       fprintf(press, "%f\t",phys[N+4]);
     }
     fprintf(dens , "\n");
@@ -810,7 +908,7 @@ void output_file2(double *U,double t){
 }
 
 
-void output_file3(double *U, double t){
+void output_file3(double *U, double *B, double t){
     
     int i=0, j, k, l, N;
     double xstep, ystep, zstep;
@@ -890,6 +988,7 @@ int main (int argc, char **argv) {
   double *phys = (double*) malloc(5*X*Y*Z*sizeof(double));
   double *U    = (double*) malloc(5*X*Y*Z*sizeof(double));
   double *U_adv = (double*) malloc(5*X*Y*Z*sizeof(double));
+  double *B = (double*) malloc(3*X*Y*Z*sizeof(double));
   double dt=0.00001;
   double t=0;
   int i, k=0, l=0;
@@ -898,7 +997,8 @@ int main (int argc, char **argv) {
 
    
   // Initial conditions:
-  init_water_oil_3d(phys);
+  init_water_oil(phys);
+  init_B_field(B);
   Ucalc(U,phys, (X)*(Y)*(Z));
   printf ("tmax = %f\n",tmax);
 //  system ("python mkplot.py");
@@ -913,14 +1013,14 @@ int main (int argc, char **argv) {
   while (t<tmax) {
 //    output_file1(U, t, j);
     t+=dt;
-    Advance(U_adv, U, &dt);
+    Advance(U_adv, U, B, &dt);
     for ( i=0;i<5*X*Y*Z;i++) {
       U[i]=U_adv[i];
     }
 //    j++;
     if (t>0.05 * k) {
-      output_file3(U, t );
-      output_file2(U, t);
+      output_file3(U, B, t);
+      output_file2(U, B, t);
       k++;
     }
     printf ("%d| t = %f\n",l,t);
@@ -930,6 +1030,7 @@ int main (int argc, char **argv) {
   free (phys);
   free (U);
   free (U_adv);
+  free (B);
 #endif
   return 0;
 }

@@ -1,6 +1,6 @@
 #!/bin/bash                                                                     
-INPUT_DIR=/Users/XIAOYI/Desktop/hpc/64x128/density/
-OUTPUT_DIR=/Users/XIAOYI/Desktop/hpc/64x128/density_out/
+INPUT_DIR=../Sequential/32x96/density/
+OUTPUT_DIR=../Sequential/32x96/density_out/
 
 SUFFIX=.png
 

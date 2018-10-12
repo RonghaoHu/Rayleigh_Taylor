@@ -1,2 +1,2 @@
 seq: seq.c
-	gcc -o $@ $^
+	gcc -o $@ $^ -lm

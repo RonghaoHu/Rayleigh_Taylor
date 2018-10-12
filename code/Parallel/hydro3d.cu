@@ -8,9 +8,9 @@
 #define PI    3.14159265
 #define G     .1
 #define GAMMA 1.4
-#define X 32
-#define Y 32
-#define Z 96
+#define X 12
+#define Y 12
+#define Z 24
 #define XMIN -.25
 #define XMAX .25
 #define YMIN -.25
