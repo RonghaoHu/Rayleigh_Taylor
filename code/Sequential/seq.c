@@ -2,22 +2,23 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+#include <omp.h>
 #include "timing.h"
 
 #define PI    3.14159265
-#define G     .1
-#define GAMMA 1.4
+#define G     6.e13
+#define GAMMA (5.0/3)
 #define X 200
 #define Y 2
 #define Z 200
-#define XMIN -.25
-#define XMAX .25
-#define YMIN -.25
-#define YMAX .25
-#define ZMIN -.75
-#define ZMAX .75
+#define XMIN -0.0001
+#define XMAX 0.0001
+#define YMIN -0.0001
+#define YMAX 0.0001
+#define ZMIN -0.0006
+#define ZMAX 0.0006
 #define THETA 2.0
-#define tmax 12
+#define tmax 20.e-9
 
 void Grid(double *gridX, double *gridY, double *gridZ) {
   *gridX = (XMAX - XMIN) / (X - 1);
@@ -43,42 +44,44 @@ double minmod(double x, double y, double z) {		// The minmod function, described
 
 double GradientX(double *phys, int N, int L, int O, double dx) {
   if (N < L*Y*Z) {
-    return (phys[N+L*Y*Z+O]-phys[N+(X-1)*L*Y*Z+O])/dx;
+    return (phys[N+L*Y*Z+O]-phys[N+(X-1)*L*Y*Z+O])/(2*dx);
   }
   else if (N >= (X-1)*L*Y*Z) {
-    return (phys[N-(X-1)*L*Y*Z+O]-phys[N-L*Y*Z+O])/dx;
+    return (phys[N-(X-1)*L*Y*Z+O]-phys[N-L*Y*Z+O])/(2*dx);
   }
   else {
-    return (phys[N+L*Y*Z+O]-phys[N-L*Y*Z+O])/dx;
+    return (phys[N+L*Y*Z+O]-phys[N-L*Y*Z+O])/(2*dx);
   }
 }
 
 double GradientY(double *phys, int N, int L, int O, double dy) {
   if (N%(L*Y*Z) < L*Z) {
-    return (phys[N+L*Z+O]-phys[N+(Y-1)*L*Z+O])/dy;
+    return (phys[N+L*Z+O]-phys[N+(Y-1)*L*Z+O])/(2*dy);
   }
   else if (N%(L*Y*Z) >= (Y-1)*L*Z) {
-    return (phys[N-(Y-1)*L*Z+O]-phys[N-L*Z+O])/dy;
+    return (phys[N-(Y-1)*L*Z+O]-phys[N-L*Z+O])/(2*dy);
   }
   else {
-    return (phys[N+L*Z+O]-phys[N-L*Z+O])/dy;
+    return (phys[N+L*Z+O]-phys[N-L*Z+O])/(2*dy);
   }
 }
 
 double GradientZ(double *phys, int N, int L, int O, double dz) {
-  return (phys[N+L+O]-phys[N-L+O])/dz;
+  return (phys[N+L+O]-phys[N-L+O])/(2*dz);
 }
 
 // Given the density, speed and pressure, we calculate the flux F:
 void FluxCalcPX(double *FX, double *phys, int N) {
   int i=0;
   for (i=0;i<N;i++) {
-      FX[5*i+0] = phys[5*i+0] * phys[5*i+1];
-      FX[5*i+1] = phys[5*i+0] * phys[5*i+1] * phys[5*i+1] + phys[5*i+4];
-      FX[5*i+2] = phys[5*i+0] * phys[5*i+1] * phys[5*i+2];
-      FX[5*i+3] = phys[5*i+0] * phys[5*i+1] * phys[5*i+3];
-      FX[5*i+4] = phys[5*i+1] *(phys[5*i+0] *(phys[5*i+1] * phys[5*i+1] + phys[5*i+2] * phys[5*i+2] + phys[5*i+3] * phys[5*i+3]) * .5 + phys[5*i+4] * GAMMA / (GAMMA - 1));
-
+      FX[8*i+0] = phys[8*i+0] * phys[8*i+1];
+      FX[8*i+1] = phys[8*i+0] * phys[8*i+1] * phys[8*i+1] + phys[8*i+4];
+      FX[8*i+2] = phys[8*i+0] * phys[8*i+1] * phys[8*i+2];
+      FX[8*i+3] = phys[8*i+0] * phys[8*i+1] * phys[8*i+3];
+      FX[8*i+4] = phys[8*i+1] *(phys[8*i+0] *(phys[8*i+1] * phys[8*i+1] + phys[8*i+2] * phys[8*i+2] + phys[8*i+3] * phys[8*i+3]) * .5 + phys[8*i+4] * GAMMA / (GAMMA - 1));
+      FX[8*i+5] = 0.0;
+      FX[8*i+6] = phys[8*i+1]*phys[8*i+6]-phys[8*i+2]*phys[8*i+5];
+      FX[8*i+7] = phys[8*i+1]*phys[8*i+7]-phys[8*i+3]*phys[8*i+5];
   }
 }
 
@@ -86,12 +89,14 @@ void FluxCalcPY(double *FY, double *phys, int N) {
   int i=0;
   for (i=0;i<N;i++) {
       
-      FY[5*i+0] = phys[5*i+0] * phys[5*i+2];
-      FY[5*i+1] = phys[5*i+0] * phys[5*i+2] * phys[5*i+1];
-      FY[5*i+2] = phys[5*i+0] * phys[5*i+2] * phys[5*i+2] + phys[5*i+4];
-      FY[5*i+3] = phys[5*i+0] * phys[5*i+2] * phys[5*i+3];
-      FY[5*i+4] = phys[5*i+2] *(phys[5*i+0] *(phys[5*i+1] * phys[5*i+1] + phys[5*i+2] * phys[5*i+2] + phys[5*i+3] * phys[5*i+3]) * .5 + phys[5*i+4] * GAMMA / (GAMMA - 1));
-
+      FY[8*i+0] = phys[8*i+0] * phys[8*i+2];
+      FY[8*i+1] = phys[8*i+0] * phys[8*i+2] * phys[8*i+1];
+      FY[8*i+2] = phys[8*i+0] * phys[8*i+2] * phys[8*i+2] + phys[8*i+4];
+      FY[8*i+3] = phys[8*i+0] * phys[8*i+2] * phys[8*i+3];
+      FY[8*i+4] = phys[8*i+2] *(phys[8*i+0] *(phys[8*i+1] * phys[8*i+1] + phys[8*i+2] * phys[8*i+2] + phys[8*i+3] * phys[8*i+3]) * .5 + phys[8*i+4] * GAMMA / (GAMMA - 1));
+      FY[8*i+5] = phys[8*i+2]*phys[8*i+5]-phys[8*i+1]*phys[8*i+6];
+      FY[8*i+6] = 0.0;
+      FY[8*i+7] = phys[8*i+2]*phys[8*8+7]-phys[8*i+3]*phys[8*i+6];
   }
 }
 
@@ -99,12 +104,14 @@ void FluxCalcPZ(double *FZ, double *phys, int N) {
   int i=0;
   for (i=0;i<N;i++) {
       
-      FZ[5*i+0] = phys[5*i+0] * phys[5*i+3];
-      FZ[5*i+1] = phys[5*i+0] * phys[5*i+3] * phys[5*i+1];
-      FZ[5*i+2] = phys[5*i+0] * phys[5*i+3] * phys[5*i+2];
-      FZ[5*i+3] = phys[5*i+0] * phys[5*i+3] * phys[5*i+3] + phys[5*i+4];
-      FZ[5*i+4] = phys[5*i+3] *(phys[5*i+0] *(phys[5*i+1] * phys[5*i+1] + phys[5*i+2] * phys[5*i+2] + phys[5*i+3] * phys[5*i+3]) * .5 + phys[5*i+4] * GAMMA / (GAMMA - 1));
-
+      FZ[8*i+0] = phys[8*i+0] * phys[8*i+3];
+      FZ[8*i+1] = phys[8*i+0] * phys[8*i+3] * phys[8*i+1];
+      FZ[8*i+2] = phys[8*i+0] * phys[8*i+3] * phys[8*i+2];
+      FZ[8*i+3] = phys[8*i+0] * phys[8*i+3] * phys[8*i+3] + phys[8*i+4];
+      FZ[8*i+4] = phys[8*i+3] *(phys[8*i+0] *(phys[8*i+1] * phys[8*i+1] + phys[8*i+2] * phys[8*i+2] + phys[8*i+3] * phys[8*i+3]) * .5 + phys[8*i+4] * GAMMA / (GAMMA - 1));
+      FZ[8*i+5] = phys[8*i+3]*phys[8*i+5]-phys[8*i+1]*phys[8*i+7];
+      FZ[8*i+6] = phys[8*i+3]*phys[8*i+6]-phys[8*i+2]*phys[8*i+7];
+      FZ[8*i+7] = 0.0;
   }
 }
 
@@ -112,11 +119,14 @@ void FluxCalcPZ(double *FZ, double *phys, int N) {
 void Ucalc(double *U, double *physicalvar, int N) {     // physicalvar[] = rho, vx, vy, vz, p
   int i=0;
   for (i=0;i<N;i++) {
-    U[5*i+0] = physicalvar[5*i+0];
-    U[5*i+1] = physicalvar[5*i+0] * physicalvar[5*i+1];
-    U[5*i+2] = physicalvar[5*i+0] * physicalvar[5*i+2];
-    U[5*i+3] = physicalvar[5*i+0] * physicalvar[5*i+3];
-    U[5*i+4] = physicalvar[5*i+4] / (GAMMA - 1) + 0.5 * physicalvar[5*i+0] * (physicalvar[5*i+1] * physicalvar[5*i+1] + physicalvar[5*i+2] * physicalvar[5*i+2] + physicalvar[5*i+3] * physicalvar[5*i+3]);
+    U[8*i+0] = physicalvar[8*i+0];
+    U[8*i+1] = physicalvar[8*i+0] * physicalvar[8*i+1];
+    U[8*i+2] = physicalvar[8*i+0] * physicalvar[8*i+2];
+    U[8*i+3] = physicalvar[8*i+0] * physicalvar[8*i+3];
+    U[8*i+4] = physicalvar[8*i+4] / (GAMMA - 1) + 0.5 * physicalvar[8*i+0] * (physicalvar[8*i+1] * physicalvar[8*i+1] + physicalvar[8*i+2] * physicalvar[8*i+2] + physicalvar[8*i+3] * physicalvar[8*i+3]);
+    U[8*i+5] = physicalvar[8*i+5];
+    U[8*i+6] = physicalvar[8*i+6];
+    U[8*i+7] = physicalvar[8*i+7];
   }
 }
 
@@ -124,11 +134,14 @@ void Ucalc(double *U, double *physicalvar, int N) {     // physicalvar[] = rho, 
 void Ucalcinv(double *physicalvar, double *U, int N) {     // physicalvar[] = rho, v, p
   int i=0;
   for (i=0;i<N;i++) {
-    physicalvar[5*i+0] = U[5*i+0];
-    physicalvar[5*i+1] = U[5*i+1] / U[5*i+0];
-    physicalvar[5*i+2] = U[5*i+2] / U[5*i+0];
-    physicalvar[5*i+3] = U[5*i+3] / U[5*i+0];
-    physicalvar[5*i+4] = (U[5*i+4] - 0.5 * (U[5*i+1] * U[5*i+1] + U[5*i+2] * U[5*i+2] + U[5*i+3] * U[5*i+3])/ U[5*i+0]) * (GAMMA - 1);
+    physicalvar[8*i+0] = U[8*i+0];
+    physicalvar[8*i+1] = U[8*i+1] / U[8*i+0];
+    physicalvar[8*i+2] = U[8*i+2] / U[8*i+0];
+    physicalvar[8*i+3] = U[8*i+3] / U[8*i+0];
+    physicalvar[8*i+4] = (U[8*i+4] - 0.5 * (U[8*i+1] * U[8*i+1] + U[8*i+2] * U[8*i+2] + U[8*i+3] * U[8*i+3])/ U[8*i+0]) * (GAMMA - 1);
+    physicalvar[8*i+5] = U[8*i+5];
+    physicalvar[8*i+6] = U[8*i+6];
+    physicalvar[8*i+7] = U[8*i+7];
   }
 }
 
@@ -167,7 +180,7 @@ void init(double *physical) {
 
 void init_water_oil(double *physical) {
   int i=0, j=0, k=0, N;
-  double   dx, dy, dz, P0=2.5, rhol=1., rhoh=2.;
+  double   dx, dy, dz, P0=1.2e16, rhol=33.e3, rhoh=66.e3;
   Grid (&dx, &dy, &dz);
   double x, y, z;
 
@@ -177,7 +190,7 @@ void init_water_oil(double *physical) {
         x = XMIN + dx * i;
         y = YMIN + dy * j;
         z = ZMIN + dz * k;
-        N = 5	 * (i*Y*Z + j*Z + k);
+        N = 8	 * (i*Y*Z + j*Z + k);
 
         if (z<0.0*cos(x*6*3.1415)) {
           physical[N+0] = rhol;
@@ -193,6 +206,9 @@ void init_water_oil(double *physical) {
           physical[N+3] = 0.01*(1. + cos(4*PI*x))*(1. + cos(4*PI*z/3.))/4.;
           physical[N+4] = P0-rhol*G*(-ZMIN)-rhoh*G*(z);
         }
+        physical[N+5] = 0.0;
+        physical[N+6] = 0.0;
+        physical[N+7] = 0.0;
       }
     }
   }
@@ -210,7 +226,7 @@ void init_water_oil_3d(double *physical) {
                 x = XMIN + dx * i;
                 y = YMIN + dy * j;
                 z = ZMIN + dz * k;
-                N = 5	 * (i*Y*Z + j*Z + k);
+                N = 8	 * (i*Y*Z + j*Z + k);
                 
                 if (z < 0.0*cos(x*6*3.1415)) {
                     physical[N+0] = rhol;
@@ -230,91 +246,28 @@ void init_water_oil_3d(double *physical) {
                     //physical[N+3] = 0.01*(1. + cos(4*PI*x))*(1. + cos(4*PI*z/3.))/4.;
                     physical[N+4] = P0-rhol*G*(-ZMIN)-rhoh*G*(z);
                 }
+                physical[N+5] = 0.0;
+                physical[N+6] = 0.0;
+                physical[N+7] = 0.0;
             }
         }
     }
-}
-
-void init_B_field(double *B) {
-    int i=0, j=0, k=0, N;
-    for (i=0;i<X;i++) {
-        for (j=0;j<Y;j++) {
-            for (k=0;k<Z;k++) {
-                N = 3	 * (i*Y*Z + j*Z + k);
-                
-                B[N] = 0.0;
-                B[N+1] = 0.0;
-                B[N+2] = 0.0;
-            }
-        }
-    }
-}
-
-void AdvanceB(double *B, double *phys, double dt) {
-  double *E = (double *) malloc (3*X*Y*Z*sizeof(double));
-  double dx, dy, dz;
-  double mu = 4*3.1415926536e-7, ee = 6.02e23 * 1.6e-19;
-  int i, j, k, N1, N2;
-  Grid (&dx, &dy, &dz);
-  
-  for (i = 0; i < X; i++) {
-    for (j = 0; j < Y; j++) {
-      for (k = 1; k < Z - 1; k++) {
-        N1 = i * 3 * Y * Z + j * 3 * Z + k * 3;
-        N2 = i * 5 * Y * Z + j * 5 * Z + k * 5;
-        E[N1] = (GradientX(phys,N2,5,4,dx)-(B[N1+2]*GradientZ(B,N1,3,0,dz)-B[N1+2]*GradientX(B,N1,3,2,dx)-B[N1+1]*GradientX(B,N1,3,1,dx)+B[N1+1]*GradientY(B,N1,3,0,dy))/mu)/(phys[N2]*ee)+phys[N2+2]*B[N1+2]-phys[N2+3]*B[N1+1];
-        E[N1+1] = (GradientY(phys,N2,5,4,dy)-(B[N1]*GradientX(B,N1,3,1,dx)-B[N1]*GradientY(B,N1,3,0,dy)-B[N1+2]*GradientY(B,N1,3,2,dy)+B[N1+2]*GradientZ(B,N1,3,1,dz))/mu)/(phys[N2]*ee)+phys[N2+3]*B[N1]-phys[N2+1]*B[N1+2];
-        E[N1+2] = (GradientZ(phys,N2,5,4,dz)-(B[N1+1]*GradientY(B,N1,3,2,dy)-B[N1+1]*GradientZ(B,N1,3,1,dz)-B[N1]*GradientZ(B,N1,3,0,dz)+B[N1]*GradientX(B,N1,3,2,dx))/mu)/(phys[N2]*ee)+phys[N2+1]*B[N1+1]-phys[N2+2]*B[N1];
-      }
-    }
-  }
-  for (i = 0; i < X; i++) {
-    for (j = 0; j < Y; j++) {
-      { 
-        k = 0;
-        N1 = i * 3 * Y * Z + j * 3 * Z + k * 3;
-        E[N1] = 0.0;
-        E[N1+1] = 0.0;
-        E[N1+2] = 0.0;
-      }
-      { 
-        k = Z-1;
-        N1 = i * 3 * Y * Z + j * 3 * Z + k * 3;
-        E[N1] = 0.0;
-        E[N1+1] = 0.0;
-        E[N1+2] = 0.0;
-      }
-    }
-  }
-
-  for (i = 0; i < X; i++) {
-    for (j = 0; j < Y; j++) {
-      for (k = 1; k < Z - 1; k++) {
-        N1 = i * 3 * Y * Z + j * 3 * Z + k * 3;
-        B[N1] = B[N1] + dt * (GradientY(E,N1,3,2,dy) - GradientZ(E,N1,3,1,dz));
-        B[N1+1] = B[N1+1] + dt * (GradientZ(E,N1,3,0,dz) - GradientX(E,N1,3,2,dx));
-        B[N1+2] = B[N1+2] + dt * (GradientX(E,N1,3,1,dx) - GradientY(E,N1,3,0,dy));
-      }
-    }
-  }
-  
-  free(E);
 }
 
 // Calculates the flux at a half integer coordinate using the riemann method.
 void riemansolverX(double *F_mid, double *U, double *max) {
-  double *phys  = (double*) malloc (5*(X)*(Y)*(Z)*sizeof (double));
-  double *phys_temp= (double*) malloc (5*(X+4)*(Y)*(Z)*sizeof (double));
-  double *physL = (double*) malloc (5*(X+1)*(Y)*(Z)*sizeof (double));
-  double *physR = (double*) malloc (5*(X+1)*(Y)*(Z)*sizeof (double));
-  double *FLX   = (double*) malloc (5*(X+1)*(Y)*(Z)*sizeof (double));
-  double *FRX   = (double*) malloc (5*(X+1)*(Y)*(Z)*sizeof (double));
-  double *UL    = (double*) malloc (5*(X+1)*(Y)*(Z)*sizeof (double));
-  double *UR    = (double*) malloc (5*(X+1)*(Y)*(Z)*sizeof (double));
+  double *phys  = (double*) malloc (8*(X)*(Y)*(Z)*sizeof (double));
+  double *phys_temp= (double*) malloc (8*(X+4)*(Y)*(Z)*sizeof (double));
+  double *physL = (double*) malloc (8*(X+1)*(Y)*(Z)*sizeof (double));
+  double *physR = (double*) malloc (8*(X+1)*(Y)*(Z)*sizeof (double));
+  double *FLX   = (double*) malloc (8*(X+1)*(Y)*(Z)*sizeof (double));
+  double *FRX   = (double*) malloc (8*(X+1)*(Y)*(Z)*sizeof (double));
+  double *UL    = (double*) malloc (8*(X+1)*(Y)*(Z)*sizeof (double));
+  double *UR    = (double*) malloc (8*(X+1)*(Y)*(Z)*sizeof (double));
   double SoundSpeedL, SoundSpeedR;											//L, SoundSpeedR, SoundSpeedLL, SoundSpeedRR;
   double AlphaPlus=0, AlphaMinus=0;
   int i, j, k, l, N;
-  int Sx = 5*Y*Z, Sy = 5*Z, Sz = 5;
+  int Sx = 8*Y*Z, Sy = 8*Z, Sz = 8;
 
   Ucalcinv (phys,U,(X)*(Y)*(Z));
 
@@ -324,7 +277,7 @@ void riemansolverX(double *F_mid, double *U, double *max) {
   for (i=0;i<X+4;i++) {
     for (j=0;j<Y;j++) {
       for (k=0;k<Z;k++) {
-        for (l=0;l<5;l++) {
+        for (l=0;l<8;l++) {
           N = Sx*i+Sy*j+Sz*k+l;
           if      (i<2) {
             phys_temp[N] = phys[Sx*(i+X-2)+Sy*j+Sz*k+l];
@@ -361,7 +314,7 @@ void riemansolverX(double *F_mid, double *U, double *max) {
   for (i=0;i<X+1;i++) {
     for (j=0;j<Y;j++) {
       for (k=0;k<Z;k++) {
-        for (l=0; l<5; l++) {
+        for (l=0; l<8; l++) {
           N = Sx*i+Sy*j+Sz*k+l;
           physL[N] = phys_temp[N+Sx]   + 0.5 * minmod (THETA*(phys_temp[N+Sx]   - phys_temp[N]),    0.5*(phys_temp[N+2*Sx] - phys_temp[N]),    THETA*(phys_temp[N+2*Sx] - phys_temp[N+Sx]));
           physR[N] = phys_temp[N+2*Sx] - 0.5 * minmod (THETA*(phys_temp[N+2*Sx] - phys_temp[N+Sx]), 0.5*(phys_temp[N+3*Sx] - phys_temp[N+Sx]), THETA*(phys_temp[N+3*Sx] - phys_temp[N+2*Sx]));
@@ -371,10 +324,10 @@ void riemansolverX(double *F_mid, double *U, double *max) {
   }
 
 
-  FluxCalcPX (FLX, physL,(X+1)*(Y)*(Z));
-  FluxCalcPX (FRX, physR,(X+1)*(Y)*(Z));
-  Ucalc     (UL,           physL,(X+1)*(Y)*(Z));
-  Ucalc     (UR,           physR,(X+1)*(Y)*(Z));
+  FluxCalcPX (FLX, physL, (X+1)*(Y)*(Z));
+  FluxCalcPX (FRX, physR, (X+1)*(Y)*(Z));
+  Ucalc     (UL, physL, (X+1)*(Y)*(Z));
+  Ucalc     (UR, physR, (X+1)*(Y)*(Z));
 
   for (i=0;i<X+1;i++) {
     for (j=0;j<Y;j++) {
@@ -389,7 +342,7 @@ void riemansolverX(double *F_mid, double *U, double *max) {
         if (AlphaPlus  <  physR[N+1] + SoundSpeedR ) AlphaPlus  =  physR[N+1] + SoundSpeedR;
         if (AlphaMinus < -physR[N+1] + SoundSpeedR ) AlphaMinus = -physR[N+1] + SoundSpeedR;
 
-        for (l=0; l<5; l++) {
+        for (l=0; l<8; l++) {
           N = Sx*i+Sy*j+Sz*k+l;
           F_mid[N] = (AlphaPlus*FLX[N]+AlphaMinus*FRX[N]-AlphaMinus*AlphaPlus*(UR[N]-UL[N]))/(AlphaPlus+AlphaMinus);
         }
@@ -411,20 +364,20 @@ void riemansolverX(double *F_mid, double *U, double *max) {
 }
 
 void riemansolverY(double *F_mid, double *U, double *max) {
-  double *phys  = (double*) malloc (5*(X)*(Y)*(Z)*sizeof (double));
-  double *phys_temp= (double*) malloc (5*(X)*(Y+4)*(Z)*sizeof (double));
-  double *physL = (double*) malloc (5*(X)*(Y+1)*(Z)*sizeof (double));
-  double *physR = (double*) malloc (5*(X)*(Y+1)*(Z)*sizeof (double));
-  double *FLY   = (double*) malloc (5*(X)*(Y+1)*(Z)*sizeof (double));
-  double *FRY   = (double*) malloc (5*(X)*(Y+1)*(Z)*sizeof (double));
-  double *UL    = (double*) malloc (5*(X)*(Y+1)*(Z)*sizeof (double));
-  double *UR    = (double*) malloc (5*(X)*(Y+1)*(Z)*sizeof (double));
+  double *phys  = (double*) malloc (8*(X)*(Y)*(Z)*sizeof (double));
+  double *phys_temp= (double*) malloc (8*(X)*(Y+4)*(Z)*sizeof (double));
+  double *physL = (double*) malloc (8*(X)*(Y+1)*(Z)*sizeof (double));
+  double *physR = (double*) malloc (8*(X)*(Y+1)*(Z)*sizeof (double));
+  double *FLY   = (double*) malloc (8*(X)*(Y+1)*(Z)*sizeof (double));
+  double *FRY   = (double*) malloc (8*(X)*(Y+1)*(Z)*sizeof (double));
+  double *UL    = (double*) malloc (8*(X)*(Y+1)*(Z)*sizeof (double));
+  double *UR    = (double*) malloc (8*(X)*(Y+1)*(Z)*sizeof (double));
   double SoundSpeedL, SoundSpeedR;											//L, SoundSpeedR, SoundSpeedLL, SoundSpeedRR;
   double AlphaPlus=0, AlphaMinus=0;
   int i, j, k, l, N, N1, N2;
-  int Sx  = 5*Y*Z,     Sy  = 5*Z, Sz  = 5;
-  int Sx1 = 5*(Y+1)*Z, Sy1 = 5*Z, Sz1 = 5;
-  int Sx2 = 5*(Y+4)*Z, Sy2 = 5*Z, Sz2 = 5;
+  int Sx  = 8*Y*Z,     Sy  = 8*Z, Sz  = 8;
+  int Sx1 = 8*(Y+1)*Z, Sy1 = 8*Z, Sz1 = 8;
+  int Sx2 = 8*(Y+4)*Z, Sy2 = 8*Z, Sz2 = 8;
 
   *max=0;
 
@@ -434,7 +387,7 @@ void riemansolverY(double *F_mid, double *U, double *max) {
   for (i=0;i<X;i++) {
     for (j=0;j<Y+4;j++) {
       for (k=0;k<Z;k++) {
-        for (l=0;l<5;l++) {
+        for (l=0;l<8;l++) {
           N = Sx2*i+Sy2*j+Sz2*k+l;
           if      (j<2) {
             phys_temp[N] = phys[Sx*i+Sy*(j+Y-2)+Sz*k+l];      // phys[N+Sy*(Y-2)];
@@ -471,7 +424,7 @@ void riemansolverY(double *F_mid, double *U, double *max) {
   for (i=0;i<X;i++) {
     for (j=0;j<Y+1;j++) {
       for (k=0;k<Z;k++) {
-        for (l=0; l<5; l++) {
+        for (l=0; l<8; l++) {
           N1 = Sx1*i+Sy1*j+Sz1*k+l;
           N2 = Sx2*i+Sy2*j+Sz2*k+l;
           physL[N1] = phys_temp[N2+Sy2]   + 0.5 * minmod (THETA*(phys_temp[N2+Sy2]   - phys_temp[N2]),     0.5*(phys_temp[N2+2*Sy2] - phys_temp[N2]),     THETA*(phys_temp[N2+2*Sy2] - phys_temp[N2+Sy2]));
@@ -483,8 +436,8 @@ void riemansolverY(double *F_mid, double *U, double *max) {
 
   FluxCalcPY (FLY, physL,(X)*(Y+1)*(Z));
   FluxCalcPY (FRY, physR,(X)*(Y+1)*(Z));
-  Ucalc     (UL,           physL,(X)*(Y+1)*(Z));
-  Ucalc     (UR,           physR,(X)*(Y+1)*(Z));
+  Ucalc     (UL, physL,(X)*(Y+1)*(Z));
+  Ucalc     (UR, physR,(X)*(Y+1)*(Z));
 
   for (i=0;i<X;i++) {
     for (j=0;j<Y+1;j++) {
@@ -499,7 +452,7 @@ void riemansolverY(double *F_mid, double *U, double *max) {
         if (AlphaPlus  <  physR[N+2] + SoundSpeedR ) AlphaPlus  =  physR[N+2] + SoundSpeedR;
         if (AlphaMinus < -physR[N+2] + SoundSpeedR ) AlphaMinus = -physR[N+2] + SoundSpeedR;
 
-        for (l=0; l<5; l++) {
+        for (l=0; l<8; l++) {
           N = Sx1*i+Sy1*j+Sz1*k+l;
           F_mid[N] = (AlphaPlus*FLY[N]+AlphaMinus*FRY[N]-AlphaMinus*AlphaPlus*(UR[N]-UL[N]))/(AlphaPlus+AlphaMinus);
         }
@@ -521,20 +474,20 @@ void riemansolverY(double *F_mid, double *U, double *max) {
 }
 
 void riemansolverZ(double *F_mid, double *U, double *max) {
-  double *phys  = (double*) malloc (5*(X)*(Y)*(Z)*sizeof (double));
-  double *phys_temp= (double*) malloc (5*(X)*(Y)*(Z+4)*sizeof (double));
-  double *physL = (double*) malloc (5*(X)*(Y)*(Z+1)*sizeof (double));
-  double *physR = (double*) malloc (5*(X)*(Y)*(Z+1)*sizeof (double));
-  double *FLZ   = (double*) malloc (5*(X)*(Y)*(Z+1)*sizeof (double));
-  double *FRZ   = (double*) malloc (5*(X)*(Y)*(Z+1)*sizeof (double));
-  double *UL    = (double*) malloc (5*(X)*(Y)*(Z+1)*sizeof (double));
-  double *UR    = (double*) malloc (5*(X)*(Y)*(Z+1)*sizeof (double));
+  double *phys  = (double*) malloc (8*(X)*(Y)*(Z)*sizeof (double));
+  double *phys_temp= (double*) malloc (8*(X)*(Y)*(Z+4)*sizeof (double));
+  double *physL = (double*) malloc (8*(X)*(Y)*(Z+1)*sizeof (double));
+  double *physR = (double*) malloc (8*(X)*(Y)*(Z+1)*sizeof (double));
+  double *FLZ   = (double*) malloc (8*(X)*(Y)*(Z+1)*sizeof (double));
+  double *FRZ   = (double*) malloc (8*(X)*(Y)*(Z+1)*sizeof (double));
+  double *UL    = (double*) malloc (8*(X)*(Y)*(Z+1)*sizeof (double));
+  double *UR    = (double*) malloc (8*(X)*(Y)*(Z+1)*sizeof (double));
   double SoundSpeedL, SoundSpeedR;											//L, SoundSpeedR, SoundSpeedLL, SoundSpeedRR;
   double AlphaPlus=0, AlphaMinus=0;
   int i, j, k, l, N, N1, N2;
-  int Sx = 5*Y*Z, Sy = 5*Z, Sz = 5;
-  int Sx1 = 5*Y*(Z+1), Sy1 = 5*(Z+1), Sz1 = 5;
-  int Sx2 = 5*Y*(Z+4), Sy2 = 5*(Z+4), Sz2 = 5;
+  int Sx = 8*Y*Z, Sy = 8*Z, Sz = 8;
+  int Sx1 = 8*Y*(Z+1), Sy1 = 8*(Z+1), Sz1 = 8;
+  int Sx2 = 8*Y*(Z+4), Sy2 = 8*(Z+4), Sz2 = 8;
 
   Ucalcinv (phys,U,(X)*(Y)*(Z));
 
@@ -543,7 +496,7 @@ void riemansolverZ(double *F_mid, double *U, double *max) {
   for (i=0;i<X;i++) {
     for (j=0;j<Y;j++) {
       for (k=0;k<Z+4;k++) {
-        for (l=0;l<5;l++) {
+        for (l=0;l<8;l++) {
           N = Sx2*i+Sy2*j+Sz2*k+l;
           if      (k==0) {
             if    (l==3)  phys_temp[N] = -phys[Sx*i+Sy*j+Sz*(1)+l];
@@ -571,7 +524,7 @@ void riemansolverZ(double *F_mid, double *U, double *max) {
   for (i=0;i<X;i++) {
     for (j=0;j<Y;j++) {
       for (k=0;k<Z+1;k++) {
-        for (l=0; l<5; l++) {
+        for (l=0; l<8; l++) {
           N1 = Sx1*i+Sy1*j+Sz1*k+l;
           N2 = Sx2*i+Sy2*j+Sz2*k+l;
           physL[N1] = phys_temp[N2+Sz2]   + 0.5 * minmod (THETA*(phys_temp[N2+Sz2]   - phys_temp[N2]),     0.5*(phys_temp[N2+2*Sz2] - phys_temp[N2]),     THETA*(phys_temp[N2+2*Sz2] - phys_temp[N2+Sz2]));
@@ -583,8 +536,8 @@ void riemansolverZ(double *F_mid, double *U, double *max) {
 
   FluxCalcPZ (FLZ,physL,(X)*(Y)*(Z+1));
   FluxCalcPZ (FRZ,physR,(X)*(Y)*(Z+1));
-  Ucalc     (UL,           physL,(X)*(Y)*(Z+1));
-  Ucalc     (UR,           physR,(X)*(Y)*(Z+1));
+  Ucalc     (UL, physL,(X)*(Y)*(Z+1));
+  Ucalc     (UR, physR,(X)*(Y)*(Z+1));
 
   for (i=0;i<X;i++) {
     for (j=0;j<Y;j++) {
@@ -599,7 +552,7 @@ void riemansolverZ(double *F_mid, double *U, double *max) {
         if (AlphaPlus  <  physR[N+3] + SoundSpeedR ) AlphaPlus  =  physR[N+3] + SoundSpeedR;
         if (AlphaMinus < -physR[N+3] + SoundSpeedR ) AlphaMinus = -physR[N+3] + SoundSpeedR;
 
-        for (l=0; l<5; l++) {
+        for (l=0; l<8; l++) {
           N = Sx1*i+Sy1*j+Sz1*k+l;
           F_mid[N] = (AlphaPlus*FLZ[N]+AlphaMinus*FRZ[N]-AlphaMinus*AlphaPlus*(UR[N]-UL[N]))/(AlphaPlus+AlphaMinus);
         }
@@ -623,8 +576,11 @@ void riemansolverZ(double *F_mid, double *U, double *max) {
 
 void Fluxsource (double *Source, double *U, double *dt) {
 
-  double *phys      = (double*) malloc (5*(X)*(Y)*(Z)*sizeof (double));
+  double *phys      = (double*) malloc (8*(X)*(Y)*(Z)*sizeof (double));
   double *Potential = (double*) malloc (  (X+2)*(Y+2)*(Z+2)*sizeof (double));
+  double *temp      = (double*) malloc (3*(X)*(Y)*(Z)*sizeof(double));
+  double *temp2      = (double*) malloc (3*(X)*(Y)*(Z)*sizeof(double));
+  double ee = 6.02e23 * 1.6e-19 * 1.e3;
   double dx, dy, dz;
   double gx, gy, gz;
   Grid (&dx, &dy, &dz);
@@ -633,7 +589,7 @@ void Fluxsource (double *Source, double *U, double *dt) {
   double GridRatioY = *dt/dy; 
   double GridRatioZ = *dt/dz; 
   int Sx  = (Y+2)*(Z+2),   Sy = (Z+2),   Sz = 1;
-  int Sx1 = 5*(Y+1)*(Z+1),   Sy1 = 5*(Z+1),  Sz1 = 5;
+  int Sx1 = 8*(Y+1)*(Z+1),   Sy1 = 8*(Z+1),  Sz1 = 8;
   int i,j,k,l,Nf, N;
 
   Ucalcinv(phys, U, (X)*(Y)*(Z));
@@ -652,6 +608,68 @@ void Fluxsource (double *Source, double *U, double *dt) {
 
 
   Sx  = (Y)*(Z);   Sy = (Z);   Sz = 1;
+
+  for (i=0;i<X;i++) {
+    for (j=0;j<Y;j++) {
+      for (k=1;k<Z-1;k++) {
+        N = i*Sx*3+j*Sy*3+k*3;
+        Nf = i*Sx*8+j*Sy*8+k*8;
+        temp[N]=GradientX(phys, Nf, 8, 4, dx)/(phys[Nf]*ee);
+        temp[N+1]=GradientY(phys, Nf, 8, 4, dy)/(phys[Nf]*ee);
+        temp[N+2]=GradientZ(phys, Nf, 8, 4, dz)/(phys[Nf]*ee);
+      }
+    }
+  }
+  for (i=0;i<X;i++) {
+    for (j=0;j<Y;j++) {
+      { 
+        k = 0;
+        N = i*Sx*3+j*Sy*3+k*3;
+        Nf = i*Sx*8+j*Sy*8+k*8;
+        temp[N]=0.0;
+        temp[N+1]=0.0;
+        temp[N+2]=0.0;
+      }
+      { 
+        k = Z-1;
+        N = i*Sx*3+j*Sy*3+k*3;
+        Nf = i*Sx*8+j*Sy*8+k*8;
+        temp[N]=0.0;
+        temp[N+1]=0.0;
+        temp[N+2]=0.0;
+      }
+    }
+  }
+
+  for (i=0;i<X;i++) {
+    for (j=0;j<Y;j++) {
+      for (k=1;k<Z-1;k++) {
+        N = i*Sx*3+j*Sy*3+k*3;
+        temp2[N]  =GradientY(temp, N, 3, 2, dy)-GradientZ(temp, N, 3, 1, dz);
+        temp2[N+1]=GradientZ(temp, N, 3, 0, dz)-GradientX(temp, N, 3, 2, dx);
+        temp2[N+2]=GradientX(temp, N, 3, 1, dx)-GradientY(temp, N, 3, 0, dy);
+      }
+    }
+  }
+  for (i=0;i<X;i++) {
+    for (j=0;j<Y;j++) {
+      { 
+        k = 0;
+        N = i*Sx*3+j*Sy*3+k*3;
+        temp2[N]=0.0;
+        temp2[N+1]=0.0;
+        temp2[N+2]=0.0;
+      }
+      { 
+        k = Z-1;
+        N = i*Sx*3+j*Sy*3+k*3;
+        temp2[N]=0.0;
+        temp2[N+1]=0.0;
+        temp2[N+2]=0.0;
+      }
+    }
+  }
+
   for (i=0;i<X;i++) {
     for (j=0;j<Y;j++) {
       for (k=0;k<Z;k++) {
@@ -665,37 +683,43 @@ void Fluxsource (double *Source, double *U, double *dt) {
         Sx = (Y)*(Z);
         Sy = (Z);
         Sz = 1;
-        Nf = 5*(i*Sx + j*Sy + k*Sz);
+        Nf = 8*(i*Sx + j*Sy + k*Sz);
+        N = 3*(i*Sx + j*Sy + k*Sz);
         Source[Nf+0] = 0.;
         Source[Nf+1] = - gx * phys[Nf+0];
         Source[Nf+2] = - gy * phys[Nf+0];
         Source[Nf+3] = - gz * phys[Nf+0];
         Source[Nf+4] = - phys [Nf+0] * (gx * phys[Nf+1] + gy * phys[Nf+2] + gz * phys[Nf+3]);
+        Source[Nf+5] = temp2[N];
+        Source[Nf+6] = temp2[N+1];
+        Source[Nf+7] = temp2[N+2];
       }
     }
   }
 
   free (Potential);
   free (phys);
+  free (temp);
+  free (temp2);
 }
 
 // Advances the function in time:
-void Advance(double *U_new,double *U_old, double *B, double *dt) {
+void Advance(double *U_new,double *U_old, double *dt) {
   int i=0, j=0, k=0, l=0, N;								// counters
 
-  double *phys   = (double*) malloc (5*(X)*(Y)*(Z)*sizeof (double));
-  double *FmidX  = (double*) malloc (5*(X+1)*(Y)*(Z)*sizeof (double));
-  double *FmidY  = (double*) malloc (5*(X)*(Y+1)*(Z)*sizeof (double));
-  double *FmidZ  = (double*) malloc (5*(X)*(Y)*(Z+1)*sizeof (double));
-  double *LU     = (double*) malloc (5*(X)*(Y)*(Z)*sizeof (double));
-  double *U1     = (double*) malloc (5*(X)*(Y)*(Z)*sizeof (double));
-  double *U2     = (double*) malloc (5*(X)*(Y)*(Z)*sizeof (double));
-  double *Source = (double*) malloc (5*(X)*(Y)*(Z)*sizeof (double));
+  double *phys   = (double*) malloc (8*(X)*(Y)*(Z)*sizeof (double));
+  double *FmidX  = (double*) malloc (8*(X+1)*(Y)*(Z)*sizeof (double));
+  double *FmidY  = (double*) malloc (8*(X)*(Y+1)*(Z)*sizeof (double));
+  double *FmidZ  = (double*) malloc (8*(X)*(Y)*(Z+1)*sizeof (double));
+  double *LU     = (double*) malloc (8*(X)*(Y)*(Z)*sizeof (double));
+  double *U1     = (double*) malloc (8*(X)*(Y)*(Z)*sizeof (double));
+  double *U2     = (double*) malloc (8*(X)*(Y)*(Z)*sizeof (double));
+  double *Source = (double*) malloc (8*(X)*(Y)*(Z)*sizeof (double));
   double max1, maxX=0, maxY=0, maxZ=0;
-  int Sx  = 5*Y*Z,     Sy = 5*Z,      Sz = 5;
-  int Sxx = 5*Y*Z,     Syx = 5*Z,     Szx = 5;
-  int Sxy = 5*(Y+1)*Z, Syy = 5*Z,     Szy = 5;
-  int Sxz = 5*Y*(Z+1), Syz = 5*(Z+1), Szz = 5;
+  int Sx  = 8*Y*Z,     Sy = 8*Z,      Sz = 8;
+  int Sxx = 8*Y*Z,     Syx = 8*Z,     Szx = 8;
+  int Sxy = 8*(Y+1)*Z, Syy = 8*Z,     Szy = 8;
+  int Sxz = 8*Y*(Z+1), Syz = 8*(Z+1), Szz = 8;
   int N1, Nx, Ny, Nz;
 
   double  GridRatioX, GridRatioY, GridRatioZ;
@@ -715,7 +739,7 @@ void Advance(double *U_new,double *U_old, double *B, double *dt) {
   for (i=0;i<X;i++) {
     for (j=0;j<Y;j++) {
       for (k=0;k<Z;k++) {
-        for (l=0; l<5; l++) {
+        for (l=0; l<8; l++) {
           N  = i*Sx + j*Sy + k*Sz + l;
           N1  = i*Sx + j*Sy + k*Sz;
           Nx = i*Sxx + j*Syx + k*Szx + l;
@@ -739,7 +763,7 @@ void Advance(double *U_new,double *U_old, double *B, double *dt) {
   for (i=0;i<X;i++) {
     for (j=0;j<Y;j++) {
       for (k=0;k<Z;k++) {
-        for (l=0; l<5; l++) {
+        for (l=0; l<8; l++) {
           N  = i*Sx + j*Sy + k*Sz + l;
           N1 = i*Sx + j*Sy + k*Sz;
           Nx = i*Sxx + j*Syx + k*Szx + l;
@@ -763,7 +787,7 @@ void Advance(double *U_new,double *U_old, double *B, double *dt) {
   for (i=0;i<X;i++) {
     for (j=0;j<Y;j++) {
       for (k=0;k<Z;k++) {
-        for (l=0; l<5; l++) {
+        for (l=0; l<8; l++) {
           N  = i*Sx + j*Sy + k*Sz + l;
           N1 = i*Sx + j*Sy + k*Sz;
           Nx = i*Sxx + j*Syx + k*Szx + l;
@@ -777,8 +801,6 @@ void Advance(double *U_new,double *U_old, double *B, double *dt) {
   }
 
   Ucalcinv(phys, U_new, X*Y*Z);
-
-  AdvanceB(B, phys, *dt);
 
   Grid(&GridRatioX, &GridRatioY, &GridRatioZ);
 
@@ -851,16 +873,16 @@ void output_file1(double *U, double t, int stat) {
 }
 
   
-void output_file2(double *U, double *B, double t){
+void output_file2(double *U, double t){
 
   int i=0, j, k, N;
   double xstep, ystep, zstep;
   Grid  (&xstep, &ystep, &zstep);
-  int Sx = 5*Y*Z, Sy = 5*Z, Sz = 5;
+  int Sx = 8*Y*Z, Sy = 8*Z, Sz = 8;
   
   char command[160];
   char name[160];
-  double *phys = (double*) malloc (5*X*Y*Z*sizeof(double));
+  double *phys = (double*) malloc (8*X*Y*Z*sizeof(double));
   Ucalcinv(phys, U, (X)*(Y)*(Z));
 
   sprintf(command, "rm density_%d_%d_%d_2d.dat",X,Y,Z);
@@ -885,7 +907,7 @@ void output_file2(double *U, double *B, double t){
       j = Y/2;
       N = Sx*i+Sy*j+Sz*k;
       fprintf(dens , "%f\t",phys[N]);
-      fprintf(vel , "%f\t",B[i*3*Y*Z+j*3*Z+k*3+1]);
+      fprintf(vel , "%f\t",phys[N+6]);
       //fprintf(vel  , "%f\t",phys[N+3]);
       fprintf(press, "%f\t",phys[N+4]);
     }
@@ -908,17 +930,17 @@ void output_file2(double *U, double *B, double t){
 }
 
 
-void output_file3(double *U, double *B, double t){
+void output_file3(double *U, double t){
     
     int i=0, j, k, l, N;
     double xstep, ystep, zstep;
     Grid  (&xstep, &ystep, &zstep);
-    int Sx = 5*Y*Z, Sy = 5*Z, Sz = 5;
+    int Sx = 8*Y*Z, Sy = 8*Z, Sz = 8;
     double xproj, yproj, zproj;
     char command[120];
     char name[120];
     
-    double *phys = (double*) malloc (5*X*Y*Z*sizeof(double));
+    double *phys = (double*) malloc (8*X*Y*Z*sizeof(double));
     Ucalcinv(phys, U, (X)*(Y)*(Z));
     
     sprintf(command, "rm density_%d_%d_%d_3d.dat",X,Y,Z);
@@ -985,11 +1007,10 @@ void Creat_folder(){
 }
 
 int main (int argc, char **argv) {
-  double *phys = (double*) malloc(5*X*Y*Z*sizeof(double));
-  double *U    = (double*) malloc(5*X*Y*Z*sizeof(double));
-  double *U_adv = (double*) malloc(5*X*Y*Z*sizeof(double));
-  double *B = (double*) malloc(3*X*Y*Z*sizeof(double));
-  double dt=0.00001;
+  double *phys = (double*) malloc(8*X*Y*Z*sizeof(double));
+  double *U    = (double*) malloc(8*X*Y*Z*sizeof(double));
+  double *U_adv = (double*) malloc(8*X*Y*Z*sizeof(double));
+  double dt=1.e-13;
   double t=0;
   int i, k=0, l=0;
 
@@ -998,7 +1019,6 @@ int main (int argc, char **argv) {
    
   // Initial conditions:
   init_water_oil(phys);
-  init_B_field(B);
   Ucalc(U,phys, (X)*(Y)*(Z));
   printf ("tmax = %f\n",tmax);
 //  system ("python mkplot.py");
@@ -1013,14 +1033,14 @@ int main (int argc, char **argv) {
   while (t<tmax) {
 //    output_file1(U, t, j);
     t+=dt;
-    Advance(U_adv, U, B, &dt);
-    for ( i=0;i<5*X*Y*Z;i++) {
+    Advance(U_adv, U, &dt);
+    for ( i=0;i<8*X*Y*Z;i++) {
       U[i]=U_adv[i];
     }
 //    j++;
     if (t>0.05 * k) {
-      output_file3(U, B, t);
-      output_file2(U, B, t);
+      output_file3(U, t);
+      output_file2(U, t);
       k++;
     }
     printf ("%d| t = %f\n",l,t);
@@ -1030,7 +1050,6 @@ int main (int argc, char **argv) {
   free (phys);
   free (U);
   free (U_adv);
-  free (B);
 #endif
   return 0;
 }

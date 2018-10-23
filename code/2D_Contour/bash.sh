@@ -1,7 +1,8 @@
 #!/bin/bash                                                                     
-INPUT_DIR=../Sequential/32x96/density/
-OUTPUT_DIR=../Sequential/32x96/density_out/
+INPUT_DIR=../bin/32x64/velocity/
+OUTPUT_DIR=../bin/32x64/velocity_out/
 
+mkdir $OUTPUT_DIR
 SUFFIX=.png
 
 FILES=`ls  $INPUT_DIR | sort -n`

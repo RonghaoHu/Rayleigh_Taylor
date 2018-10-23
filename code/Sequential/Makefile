@@ -1,2 +1,3 @@
 seq: seq.c
-	gcc -o $@ $^ -lm
+	gcc -fopenmp -g -o $@ $^ -lm
+	mv seq ../bin/.
