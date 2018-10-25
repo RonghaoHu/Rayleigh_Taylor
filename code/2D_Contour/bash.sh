@@ -1,6 +1,6 @@
 #!/bin/bash                                                                     
-INPUT_DIR=../bin/32x64/velocity/
-OUTPUT_DIR=../bin/32x64/velocity_out/
+INPUT_DIR=../bin/50x50/velocity/
+OUTPUT_DIR=../bin/50x50/velocity_out/
 
 mkdir $OUTPUT_DIR
 SUFFIX=.png

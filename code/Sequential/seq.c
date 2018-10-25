@@ -7,10 +7,10 @@
 
 #define PI    3.14159265
 #define G     6.e13
-#define GAMMA (5.0/3)
-#define X 200
+#define GAMMA 1.4
+#define X 50
 #define Y 2
-#define Z 200
+#define Z 50
 #define XMIN -0.0001
 #define XMAX 0.0001
 #define YMIN -0.0001
@@ -180,7 +180,7 @@ void init(double *physical) {
 
 void init_water_oil(double *physical) {
   int i=0, j=0, k=0, N;
-  double   dx, dy, dz, P0=1.2e16, rhol=33.e3, rhoh=66.e3;
+  double   dx, dy, dz, P0=1.2e17, rhol=33.e3, rhoh=66.e3;
   Grid (&dx, &dy, &dz);
   double x, y, z;
 
@@ -196,14 +196,14 @@ void init_water_oil(double *physical) {
           physical[N+0] = rhol;
           physical[N+1] = 0.0;
           physical[N+2] = 0.0;
-          physical[N+3] = 0.01*(1. + cos(4*PI*x))*(1. + cos(4*PI*z/3.))/4.;
+          physical[N+3] = 1.e2*(1. + cos(2*PI*x/(XMAX-XMIN)))*(1. + cos(2*PI*z/(ZMAX-ZMIN)))/4.;
           physical[N+4] = P0-rhol*G*(z-ZMIN);
         }
         else {
           physical[N+0] = rhoh;
           physical[N+1] = 0.0;
           physical[N+2] = 0.0;
-          physical[N+3] = 0.01*(1. + cos(4*PI*x))*(1. + cos(4*PI*z/3.))/4.;
+          physical[N+3] = 1.e2*(1. + cos(2*PI*x/(XMAX-XMIN)))*(1. + cos(2*PI*z/(ZMAX-ZMIN)))/4.;
           physical[N+4] = P0-rhol*G*(-ZMIN)-rhoh*G*(z);
         }
         physical[N+5] = 0.0;
@@ -907,8 +907,8 @@ void output_file2(double *U, double t){
       j = Y/2;
       N = Sx*i+Sy*j+Sz*k;
       fprintf(dens , "%f\t",phys[N]);
-      fprintf(vel , "%f\t",phys[N+6]);
-      //fprintf(vel  , "%f\t",phys[N+3]);
+      //fprintf(vel , "%f\t",phys[N+6]);
+      fprintf(vel  , "%f\t",phys[N+3]);
       fprintf(press, "%f\t",phys[N+4]);
     }
     fprintf(dens , "\n");
@@ -919,11 +919,11 @@ void output_file2(double *U, double t){
   fclose(vel);
   fclose(press);
 
-  sprintf(command, "cp density_%d_%d_%d_2d.dat %dx%d/density/%f.dat",X,Y,Z,X,Z,t);
+  sprintf(command, "cp density_%d_%d_%d_2d.dat %dx%d/density/%f.dat",X,Y,Z,X,Z,t/1e-9);
   system(command);
-  sprintf(command, "cp velocity_%d_%d_%d_2d.dat %dx%d/velocity/%f.dat",X,Y,Z,X,Z,t);
+  sprintf(command, "cp velocity_%d_%d_%d_2d.dat %dx%d/velocity/%f.dat",X,Y,Z,X,Z,t/1e-9);
   system(command);
-  sprintf(command, "cp pressure_%d_%d_%d_2d.dat %dx%d/pressure/%f.dat",X,Y,Z,X,Z,t);
+  sprintf(command, "cp pressure_%d_%d_%d_2d.dat %dx%d/pressure/%f.dat",X,Y,Z,X,Z,t/1e-9);
   system(command);
 
   free (phys);
@@ -1038,12 +1038,12 @@ int main (int argc, char **argv) {
       U[i]=U_adv[i];
     }
 //    j++;
-    if (t>0.05 * k) {
-      output_file3(U, t);
+    if (t>1e-9 * k) {
+      //output_file3(U, t);
       output_file2(U, t);
       k++;
     }
-    printf ("%d| t = %f\n",l,t);
+    printf ("%d| t = %f\n",l,t/1e-9);
     l++;
   }
 
