@@ -183,6 +183,7 @@ void init_water_oil(double *physical) {
   double   dx, dy, dz, P0=1.2e17, rhol=33.e3, rhoh=66.e3;
   Grid (&dx, &dy, &dz);
   double x, y, z;
+  double scaleLen = (ZMAX-ZMIN)/10, c_pert;
 
   for (i=0;i<X;i++) {
     for (j=0;j<Y;j++) {
@@ -192,20 +193,13 @@ void init_water_oil(double *physical) {
         z = ZMIN + dz * k;
         N = 8	 * (i*Y*Z + j*Z + k);
 
-        if (z<0.0*cos(x*6*3.1415)) {
-          physical[N+0] = rhol;
-          physical[N+1] = 0.0;
-          physical[N+2] = 0.0;
-          physical[N+3] = 1.e2*(1. + cos(2*PI*x/(XMAX-XMIN)))*(1. + cos(2*PI*z/(ZMAX-ZMIN)))/4.;
-          physical[N+4] = P0-rhol*G*(z-ZMIN);
-        }
-        else {
-          physical[N+0] = rhoh;
-          physical[N+1] = 0.0;
-          physical[N+2] = 0.0;
-          physical[N+3] = 1.e2*(1. + cos(2*PI*x/(XMAX-XMIN)))*(1. + cos(2*PI*z/(ZMAX-ZMIN)))/4.;
-          physical[N+4] = P0-rhol*G*(-ZMIN)-rhoh*G*(z);
-        }
+        physical[N+0] = (rhol + rhoh) / 2 + tanh((z)/scaleLen) * (rhoh - rhol) / 2;
+        physical[N+1] = 0.0;
+        physical[N+2] = 0.0;
+        physical[N+3] = 0.0;
+        physical[N+3] = 0.0;
+        c_pert = 1.0-0.05 * cos(2 * PI * (x - XMIN) / (XMAX - XMIN)) * exp(-(z*z)/(scaleLen*scaleLen));
+        physical[N+4] = c_pert * (P0 - G * ((z) * (rhol + rhoh) / 2 + log(cosh((z)/scaleLen))*scaleLen*(rhoh - rhol) / 2));
         physical[N+5] = 0.0;
         physical[N+6] = 0.0;
         physical[N+7] = 0.0;
@@ -690,9 +684,9 @@ void Fluxsource (double *Source, double *U, double *dt) {
         Source[Nf+2] = - gy * phys[Nf+0];
         Source[Nf+3] = - gz * phys[Nf+0];
         Source[Nf+4] = - phys [Nf+0] * (gx * phys[Nf+1] + gy * phys[Nf+2] + gz * phys[Nf+3]);
-        Source[Nf+5] = temp2[N];
-        Source[Nf+6] = temp2[N+1];
-        Source[Nf+7] = temp2[N+2];
+        Source[Nf+5] = temp2[N] * (*dt);
+        Source[Nf+6] = temp2[N+1] * (*dt);
+        Source[Nf+7] = temp2[N+2] * (*dt);
       }
     }
   }
@@ -907,8 +901,8 @@ void output_file2(double *U, double t){
       j = Y/2;
       N = Sx*i+Sy*j+Sz*k;
       fprintf(dens , "%f\t",phys[N]);
-      //fprintf(vel , "%f\t",phys[N+6]);
-      fprintf(vel  , "%f\t",phys[N+3]);
+      fprintf(vel , "%f\t",phys[N+6]);
+      //fprintf(vel  , "%f\t",phys[N+3]);
       fprintf(press, "%f\t",phys[N+4]);
     }
     fprintf(dens , "\n");
