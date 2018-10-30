@@ -1,4 +1,5 @@
 hydro3d: hydro3d.cu
-	nvcc -DCUDA_ARCH=21 -o $@ $^
+	nvcc -o $@ $^
+	mv $@ ../bin
 hydro3d_global: hydro3d_global.cu
 	nvcc   -o $@ $^

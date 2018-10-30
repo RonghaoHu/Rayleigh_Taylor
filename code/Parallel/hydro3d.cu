@@ -8,9 +8,9 @@
 #define PI    3.14159265
 #define G     .1
 #define GAMMA 1.4
-#define X 12
-#define Y 12
-#define Z 24
+#define X 32
+#define Y 32
+#define Z 96
 #define XMIN -.25
 #define XMAX .25
 #define YMIN -.25
@@ -18,7 +18,7 @@
 #define ZMIN -.75
 #define ZMAX .75
 #define THETA 2.0
-#define tmax 15.
+#define tmax 12.
 
 #define BLOCK_SIZE 256
 __constant__ float P0 = 2.5;
@@ -38,34 +38,66 @@ __device__ void d_Grid(float* gridX, float* gridY, float* gridZ){
   *gridZ = (ZMAX - ZMIN) / (Z - 1);
 }
 
+__device__ float GradientX(float *phys, int N, int L, int O, float dx) {
+  if (N < L*Y*Z) {
+    return (phys[N+L*Y*Z+O]-phys[N+(X-1)*L*Y*Z+O])/(2*dx);
+  }
+  else if (N >= (X-1)*L*Y*Z) {
+    return (phys[N-(X-1)*L*Y*Z+O]-phys[N-L*Y*Z+O])/(2*dx);
+  }
+  else {
+    return (phys[N+L*Y*Z+O]-phys[N-L*Y*Z+O])/(2*dx);
+  }
+}
+
+__device__ float GradientY(float *phys, int N, int L, int O, float dy) {
+  if (N%(L*Y*Z) < L*Z) {
+    return (phys[N+L*Z+O]-phys[N+(Y-1)*L*Z+O])/(2*dy);
+  }
+  else if (N%(L*Y*Z) >= (Y-1)*L*Z) {
+    return (phys[N-(Y-1)*L*Z+O]-phys[N-L*Z+O])/(2*dy);
+  }
+  else {
+    return (phys[N+L*Z+O]-phys[N-L*Z+O])/(2*dy);
+  }
+}
+
+__device__ float GradientZ(float *phys, int N, int L, int O, float dz) {
+  return (phys[N+L+O]-phys[N-L+O])/(2*dz);
+}
 
 __global__ void h_Ucalc(float *U, float *phys, int NThreads) {
   int i = blockDim.x * blockIdx.x + threadIdx.x;
   int l;
-  __shared__ float local_phys[BLOCK_SIZE*5];
+  __shared__ float local_phys[BLOCK_SIZE*8];
   
   if( i < NThreads){
-    for(l = 0; l < 5; l++) local_phys[5*threadIdx.x + l] = phys[5*i + l];
-    U[5*i+0] = local_phys[5*threadIdx.x+0];
-    U[5*i+1] = local_phys[5*threadIdx.x+0] * local_phys[5*threadIdx.x+1];
-    U[5*i+2] = local_phys[5*threadIdx.x+0] * local_phys[5*threadIdx.x+2];
-    U[5*i+3] = local_phys[5*threadIdx.x+0] * local_phys[5*threadIdx.x+3];
-    U[5*i+4] = local_phys[5*threadIdx.x+4] / (GAMMA - 1) + 0.5 * local_phys[5*threadIdx.x+0] * (local_phys[5*threadIdx.x+1] * local_phys[5*threadIdx.x+1] + local_phys[5*threadIdx.x+2] * local_phys[5*threadIdx.x+2] + local_phys[5*threadIdx.x+3] * local_phys[5*threadIdx.x+3]);
-
+    for(l = 0; l < 8; l++) local_phys[8*threadIdx.x + l] = phys[8*i + l];
+    U[8*i+0] = local_phys[8*threadIdx.x+0];
+    U[8*i+1] = local_phys[8*threadIdx.x+0] * local_phys[8*threadIdx.x+1];
+    U[8*i+2] = local_phys[8*threadIdx.x+0] * local_phys[8*threadIdx.x+2];
+    U[8*i+3] = local_phys[8*threadIdx.x+0] * local_phys[8*threadIdx.x+3];
+    U[8*i+4] = local_phys[8*threadIdx.x+4] / (GAMMA - 1) + 0.5 * local_phys[8*threadIdx.x+0] * (local_phys[8*threadIdx.x+1] * local_phys[8*threadIdx.x+1] + local_phys[8*threadIdx.x+2] * local_phys[8*threadIdx.x+2] + local_phys[8*threadIdx.x+3] * local_phys[8*threadIdx.x+3]);
+    U[8*i+5] = local_phys[8*threadIdx.x+5];
+    U[8*i+6] = local_phys[8*threadIdx.x+6];
+    U[8*i+7] = local_phys[8*threadIdx.x+7];
   }
 }
 
 __global__ void h_Ucalcinv(float *phys, float *U, int NThreads) {     // phys[] = rho, v, p
   int i = blockDim.x * blockIdx.x + threadIdx.x;
   int l;
-  __shared__ float local_U[BLOCK_SIZE*5];
+  __shared__ float local_U[BLOCK_SIZE*8];
   if( i < NThreads ) {
-    for(l = 0; l < 5; l++) local_U[5*threadIdx.x + l] = U[5*i + l];
-    phys[5*i+0] = local_U[5*threadIdx.x+0];
-    phys[5*i+1] = local_U[5*threadIdx.x+1] / local_U[5*threadIdx.x+0];
-    phys[5*i+2] = local_U[5*threadIdx.x+2] / local_U[5*threadIdx.x+0];
-    phys[5*i+3] = local_U[5*threadIdx.x+3] / local_U[5*threadIdx.x+0];
-    phys[5*i+4] = (local_U[5*threadIdx.x+4] - 0.5 * (local_U[5*threadIdx.x+1] * local_U[5*threadIdx.x+1] + local_U[5*threadIdx.x+2] * local_U[5*threadIdx.x+2] + local_U[5*threadIdx.x+3] * local_U[5*threadIdx.x+3])/ local_U[5*threadIdx.x+0]) * (GAMMA - 1);
+    for(l = 0; l < 8; l++) local_U[8*threadIdx.x + l] = U[8*i + l];
+    phys[8*i+0] = local_U[8*threadIdx.x+0];
+    phys[8*i+1] = local_U[8*threadIdx.x+1] / local_U[8*threadIdx.x+0];
+    phys[8*i+2] = local_U[8*threadIdx.x+2] / local_U[8*threadIdx.x+0];
+    phys[8*i+3] = local_U[8*threadIdx.x+3] / local_U[8*threadIdx.x+0];
+    phys[8*i+4] = (local_U[8*threadIdx.x+4] - 0.5 * (local_U[8*threadIdx.x+1] * local_U[8*threadIdx.x+1] + local_U[8*threadIdx.x+2] * local_U[8*threadIdx.x+2] + local_U[8*threadIdx.x+3] * local_U[8*threadIdx.x+3])/ local_U[8*threadIdx.x+0]) * (GAMMA - 1);
+    phys[8*i+5] = local_U[8*threadIdx.x+5];
+    phys[8*i+6] = local_U[8*threadIdx.x+6];
+    phys[8*i+7] = local_U[8*threadIdx.x+7];
   }
 }
 
@@ -73,24 +105,24 @@ __global__ void h_FluxCalcPX(float *FLX, float *physL, float *FRX, float *physR,
 {
   int i = blockDim.x * blockIdx.x + threadIdx.x;
   int l;
-  __shared__ float d_physL[BLOCK_SIZE*5];
-  __shared__ float d_physR[BLOCK_SIZE*5];
+  __shared__ float d_physL[BLOCK_SIZE*8];
+  __shared__ float d_physR[BLOCK_SIZE*8];
   
   if(i < NThreads){
-    for(l = 0; l < 5; l++) d_physL[5*threadIdx.x+l] = physL[5*i+l];
-    for(l = 0; l < 5; l++) d_physR[5*threadIdx.x+l] = physR[5*i+l];
+    for(l = 0; l < 8; l++) d_physL[8*threadIdx.x+l] = physL[8*i+l];
+    for(l = 0; l < 8; l++) d_physR[8*threadIdx.x+l] = physR[8*i+l];
     
-    FLX[5*i+0] = d_physL[5*threadIdx.x+0] * d_physL[5*threadIdx.x+1];
-    FLX[5*i+1] = d_physL[5*threadIdx.x+0] * d_physL[5*threadIdx.x+1] * d_physL[5*threadIdx.x+1] + d_physL[5*threadIdx.x+4];
-    FLX[5*i+2] = d_physL[5*threadIdx.x+0] * d_physL[5*threadIdx.x+1] * d_physL[5*threadIdx.x+2];
-    FLX[5*i+3] = d_physL[5*threadIdx.x+0] * d_physL[5*threadIdx.x+1] * d_physL[5*threadIdx.x+3];
-    FLX[5*i+4] = d_physL[5*threadIdx.x+1] *(d_physL[5*threadIdx.x+0] *(d_physL[5*threadIdx.x+1] * d_physL[5*threadIdx.x+1] + d_physL[5*threadIdx.x+2] * d_physL[5*threadIdx.x+2] + d_physL[5*threadIdx.x+3] * d_physL[5*threadIdx.x+3]) * .5 + d_physL[5*threadIdx.x+4] * GAMMA / (GAMMA - 1));
+    FLX[8*i+0] = d_physL[8*threadIdx.x+0] * d_physL[8*threadIdx.x+1];
+    FLX[8*i+1] = d_physL[8*threadIdx.x+0] * d_physL[8*threadIdx.x+1] * d_physL[8*threadIdx.x+1] + d_physL[8*threadIdx.x+4];
+    FLX[8*i+2] = d_physL[8*threadIdx.x+0] * d_physL[8*threadIdx.x+1] * d_physL[8*threadIdx.x+2];
+    FLX[8*i+3] = d_physL[8*threadIdx.x+0] * d_physL[8*threadIdx.x+1] * d_physL[8*threadIdx.x+3];
+    FLX[8*i+4] = d_physL[8*threadIdx.x+1] *(d_physL[8*threadIdx.x+0] *(d_physL[8*threadIdx.x+1] * d_physL[8*threadIdx.x+1] + d_physL[8*threadIdx.x+2] * d_physL[8*threadIdx.x+2] + d_physL[8*threadIdx.x+3] * d_physL[8*threadIdx.x+3]) * .5 + d_physL[8*threadIdx.x+4] * GAMMA / (GAMMA - 1));
 
-    FRX[5*i+0] = d_physR[5*threadIdx.x+0] * d_physR[5*threadIdx.x+1];
-    FRX[5*i+1] = d_physR[5*threadIdx.x+0] * d_physR[5*threadIdx.x+1] * d_physR[5*threadIdx.x+1] + d_physR[5*threadIdx.x+4];
-    FRX[5*i+2] = d_physR[5*threadIdx.x+0] * d_physR[5*threadIdx.x+1] * d_physR[5*threadIdx.x+2];
-    FRX[5*i+3] = d_physR[5*threadIdx.x+0] * d_physR[5*threadIdx.x+1] * d_physR[5*threadIdx.x+3];
-    FRX[5*i+4] = d_physR[5*threadIdx.x+1] *(d_physR[5*threadIdx.x+0] *(d_physR[5*threadIdx.x+1] * d_physR[5*threadIdx.x+1] + d_physR[5*threadIdx.x+2] * d_physR[5*threadIdx.x+2] + d_physR[5*threadIdx.x+3] * d_physR[5*threadIdx.x+3]) * .5 + d_physR[5*threadIdx.x+4] * GAMMA / (GAMMA - 1));
+    FRX[8*i+0] = d_physR[8*threadIdx.x+0] * d_physR[8*threadIdx.x+1];
+    FRX[8*i+1] = d_physR[8*threadIdx.x+0] * d_physR[8*threadIdx.x+1] * d_physR[8*threadIdx.x+1] + d_physR[8*threadIdx.x+4];
+    FRX[8*i+2] = d_physR[8*threadIdx.x+0] * d_physR[8*threadIdx.x+1] * d_physR[8*threadIdx.x+2];
+    FRX[8*i+3] = d_physR[8*threadIdx.x+0] * d_physR[8*threadIdx.x+1] * d_physR[8*threadIdx.x+3];
+    FRX[8*i+4] = d_physR[8*threadIdx.x+1] *(d_physR[8*threadIdx.x+0] *(d_physR[8*threadIdx.x+1] * d_physR[8*threadIdx.x+1] + d_physR[8*threadIdx.x+2] * d_physR[8*threadIdx.x+2] + d_physR[8*threadIdx.x+3] * d_physR[8*threadIdx.x+3]) * .5 + d_physR[8*threadIdx.x+4] * GAMMA / (GAMMA - 1));
   }
 }
 
@@ -99,16 +131,19 @@ __global__ void h_FluxCalcPX_N(float *FL, float *phys, int NThreads)
 {
   int i = blockDim.x * blockIdx.x + threadIdx.x;
   int l;
-  __shared__ float d_phys[BLOCK_SIZE*5];
+  __shared__ float d_phys[BLOCK_SIZE*8];
   
   if(i < NThreads){
-    for(l = 0; l < 5; l++) d_phys[5*threadIdx.x+l] = phys[5*i+l];
+    for(l = 0; l < 8; l++) d_phys[8*threadIdx.x+l] = phys[8*i+l];
     
-    FL[5*i+0] = d_phys[5*threadIdx.x+0] * d_phys[5*threadIdx.x+1];
-    FL[5*i+1] = d_phys[5*threadIdx.x+0] * d_phys[5*threadIdx.x+1] * d_phys[5*threadIdx.x+1] + d_phys[5*threadIdx.x+4];
-    FL[5*i+2] = d_phys[5*threadIdx.x+0] * d_phys[5*threadIdx.x+1] * d_phys[5*threadIdx.x+2];
-    FL[5*i+3] = d_phys[5*threadIdx.x+0] * d_phys[5*threadIdx.x+1] * d_phys[5*threadIdx.x+3];
-    FL[5*i+4] = d_phys[5*threadIdx.x+1] *(d_phys[5*threadIdx.x+0] *(d_phys[5*threadIdx.x+1] * d_phys[5*threadIdx.x+1] + d_phys[5*threadIdx.x+2] * d_phys[5*threadIdx.x+2] + d_phys[5*threadIdx.x+3] * d_phys[5*threadIdx.x+3]) * .5 + d_phys[5*threadIdx.x+4] * GAMMA / (GAMMA - 1));
+    FL[8*i+0] = d_phys[8*threadIdx.x+0] * d_phys[8*threadIdx.x+1];
+    FL[8*i+1] = d_phys[8*threadIdx.x+0] * d_phys[8*threadIdx.x+1] * d_phys[8*threadIdx.x+1] + d_phys[8*threadIdx.x+4];
+    FL[8*i+2] = d_phys[8*threadIdx.x+0] * d_phys[8*threadIdx.x+1] * d_phys[8*threadIdx.x+2];
+    FL[8*i+3] = d_phys[8*threadIdx.x+0] * d_phys[8*threadIdx.x+1] * d_phys[8*threadIdx.x+3];
+    FL[8*i+4] = d_phys[8*threadIdx.x+1] *(d_phys[8*threadIdx.x+0] *(d_phys[8*threadIdx.x+1] * d_phys[8*threadIdx.x+1] + d_phys[8*threadIdx.x+2] * d_phys[8*threadIdx.x+2] + d_phys[8*threadIdx.x+3] * d_phys[8*threadIdx.x+3]) * .5 + d_phys[8*threadIdx.x+4] * GAMMA / (GAMMA - 1));
+    FL[8*i+5] = 0.0;
+    FL[8*i+6] = d_phys[8*threadIdx.x+1]*d_phys[8*threadIdx.x+6]-d_phys[8*threadIdx.x+2]*d_phys[8*threadIdx.x+5];
+    FL[8*i+7] = d_phys[8*threadIdx.x+1]*d_phys[8*threadIdx.x+7]-d_phys[8*threadIdx.x+3]*d_phys[8*threadIdx.x+5];
   }
 }
 
@@ -118,17 +153,19 @@ __global__ void h_FluxCalcPY_N(float *FL, float *phys, int NThreads)
 {
   int i = blockDim.x * blockIdx.x + threadIdx.x;
   int l;
-  __shared__ float d_phys[BLOCK_SIZE*5];
+  __shared__ float d_phys[BLOCK_SIZE*8];
 
   if(i < NThreads){
-    for(l = 0; l < 5; l++) d_phys[5*threadIdx.x+l] = phys[5*i+l];
+    for(l = 0; l < 8; l++) d_phys[8*threadIdx.x+l] = phys[8*i+l];
 
-    FL[5*i+0] = d_phys[5*threadIdx.x+0] * d_phys[5*threadIdx.x+2];
-    FL[5*i+1] = d_phys[5*threadIdx.x+0] * d_phys[5*threadIdx.x+2] * d_phys[5*threadIdx.x+1];
-    FL[5*i+2] = d_phys[5*threadIdx.x+0] * d_phys[5*threadIdx.x+2] * d_phys[5*threadIdx.x+2] + d_phys[5*threadIdx.x+4];
-    FL[5*i+3] = d_phys[5*threadIdx.x+0] * d_phys[5*threadIdx.x+2] * d_phys[5*threadIdx.x+3];
-    FL[5*i+4] = d_phys[5*threadIdx.x+2] *(d_phys[5*threadIdx.x+0] *(d_phys[5*threadIdx.x+1] * d_phys[5*threadIdx.x+1] + d_phys[5*threadIdx.x+2] * d_phys[5*threadIdx.x+2] + d_phys[5*threadIdx.x+3] * d_phys[5*threadIdx.x+3]) * .5 + d_phys[5*threadIdx.x+4] * GAMMA / (GAMMA - 1));
-
+    FL[8*i+0] = d_phys[8*threadIdx.x+0] * d_phys[8*threadIdx.x+2];
+    FL[8*i+1] = d_phys[8*threadIdx.x+0] * d_phys[8*threadIdx.x+2] * d_phys[8*threadIdx.x+1];
+    FL[8*i+2] = d_phys[8*threadIdx.x+0] * d_phys[8*threadIdx.x+2] * d_phys[8*threadIdx.x+2] + d_phys[8*threadIdx.x+4];
+    FL[8*i+3] = d_phys[8*threadIdx.x+0] * d_phys[8*threadIdx.x+2] * d_phys[8*threadIdx.x+3];
+    FL[8*i+4] = d_phys[8*threadIdx.x+2] *(d_phys[8*threadIdx.x+0] *(d_phys[8*threadIdx.x+1] * d_phys[8*threadIdx.x+1] + d_phys[8*threadIdx.x+2] * d_phys[8*threadIdx.x+2] + d_phys[8*threadIdx.x+3] * d_phys[8*threadIdx.x+3]) * .5 + d_phys[8*threadIdx.x+4] * GAMMA / (GAMMA - 1));
+    FL[8*i+5] = d_phys[8*threadIdx.x+2]*d_phys[8*threadIdx.x+5]-d_phys[8*threadIdx.x+1]*d_phys[8*threadIdx.x+6];
+    FL[8*i+6] = 0.0;
+    FL[8*i+7] = d_phys[8*threadIdx.x+2]*d_phys[8*threadIdx.x+7]-d_phys[8*threadIdx.x+3]*d_phys[8*threadIdx.x+6];
   }
 }
 
@@ -137,16 +174,18 @@ __global__ void h_FluxCalcPZ_N(float *FL, float *phys, int NThreads)
 {
   int i = blockDim.x * blockIdx.x + threadIdx.x;
   int l;
-  __shared__ float d_phys[BLOCK_SIZE*5];
+  __shared__ float d_phys[BLOCK_SIZE*8];
 
   if(i < NThreads){
-    for(l = 0; l < 5; l++) d_phys[5*threadIdx.x+l] = phys[5*i+l];
-    FL[5*i+0] = d_phys[5*threadIdx.x+0] * d_phys[5*threadIdx.x+3];
-    FL[5*i+1] = d_phys[5*threadIdx.x+0] * d_phys[5*threadIdx.x+3] * d_phys[5*threadIdx.x+1];
-    FL[5*i+2] = d_phys[5*threadIdx.x+0] * d_phys[5*threadIdx.x+3] * d_phys[5*threadIdx.x+2];
-    FL[5*i+3] = d_phys[5*threadIdx.x+0] * d_phys[5*threadIdx.x+3] * d_phys[5*threadIdx.x+3] + d_phys[5*threadIdx.x+4];
-    FL[5*i+4] = d_phys[5*threadIdx.x+3] *(d_phys[5*threadIdx.x+0] *(d_phys[5*threadIdx.x+1] * d_phys[5*threadIdx.x+1] + d_phys[5*threadIdx.x+2] * d_phys[5*threadIdx.x+2] + d_phys[5*threadIdx.x+3] * d_phys[5*threadIdx.x+3]) * .5 + d_phys[5*threadIdx.x+4] * GAMMA / (GAMMA - 1));
-
+    for(l = 0; l < 8; l++) d_phys[8*threadIdx.x+l] = phys[8*i+l];
+    FL[8*i+0] = d_phys[8*threadIdx.x+0] * d_phys[8*threadIdx.x+3];
+    FL[8*i+1] = d_phys[8*threadIdx.x+0] * d_phys[8*threadIdx.x+3] * d_phys[8*threadIdx.x+1];
+    FL[8*i+2] = d_phys[8*threadIdx.x+0] * d_phys[8*threadIdx.x+3] * d_phys[8*threadIdx.x+2];
+    FL[8*i+3] = d_phys[8*threadIdx.x+0] * d_phys[8*threadIdx.x+3] * d_phys[8*threadIdx.x+3] + d_phys[8*threadIdx.x+4];
+    FL[8*i+4] = d_phys[8*threadIdx.x+3] *(d_phys[8*threadIdx.x+0] *(d_phys[8*threadIdx.x+1] * d_phys[8*threadIdx.x+1] + d_phys[8*threadIdx.x+2] * d_phys[8*threadIdx.x+2] + d_phys[8*threadIdx.x+3] * d_phys[8*threadIdx.x+3]) * .5 + d_phys[8*threadIdx.x+4] * GAMMA / (GAMMA - 1));
+    FL[8*i+5] = d_phys[8*threadIdx.x+3]*d_phys[8*threadIdx.x+5]-d_phys[8*threadIdx.x+1]*d_phys[8*threadIdx.x+7];
+    FL[8*i+6] = d_phys[8*threadIdx.x+3]*d_phys[8*threadIdx.x+6]-d_phys[8*threadIdx.x+2]*d_phys[8*threadIdx.x+7];
+    FL[8*i+7] = 0.0;
   }
 }
 
@@ -154,11 +193,14 @@ __global__ void h_FluxCalcPZ_N(float *FL, float *phys, int NThreads)
 void Ucalc(float *U, float *phys, int N) {     // phys[] = rho, vx, vy, vz, p
   int i=0;
   for (i=0;i<N;i++) {
-    U[5*i+0] = phys[5*i+0];
-    U[5*i+1] = phys[5*i+0] * phys[5*i+1];
-    U[5*i+2] = phys[5*i+0] * phys[5*i+2];
-    U[5*i+3] = phys[5*i+0] * phys[5*i+3];
-    U[5*i+4] = phys[5*i+4] / (GAMMA - 1) + 0.5 * phys[5*i+0] * (phys[5*i+1] * phys[5*i+1] + phys[5*i+2] * phys[5*i+2] + phys[5*i+3] * phys[5*i+3]);
+    U[8*i+0] = phys[8*i+0];
+    U[8*i+1] = phys[8*i+0] * phys[8*i+1];
+    U[8*i+2] = phys[8*i+0] * phys[8*i+2];
+    U[8*i+3] = phys[8*i+0] * phys[8*i+3];
+    U[8*i+4] = phys[8*i+4] / (GAMMA - 1) + 0.5 * phys[8*i+0] * (phys[8*i+1] * phys[8*i+1] + phys[8*i+2] * phys[8*i+2] + phys[8*i+3] * phys[8*i+3]);
+    U[8*i+5] = phys[8*i+5];
+    U[8*i+6] = phys[8*i+6];
+    U[8*i+7] = phys[8*i+7];
   }
 }
 
@@ -166,11 +208,14 @@ void Ucalc(float *U, float *phys, int N) {     // phys[] = rho, vx, vy, vz, p
 void Ucalcinv(float *phys, float *U, int N) {     // phys[] = rho, v, p
   int i=0;
   for (i=0;i<N;i++) {
-    phys[5*i+0] = U[5*i+0];
-    phys[5*i+1] = U[5*i+1] / U[5*i+0];
-    phys[5*i+2] = U[5*i+2] / U[5*i+0];
-    phys[5*i+3] = U[5*i+3] / U[5*i+0];
-    phys[5*i+4] = (U[5*i+4] - 0.5 * (U[5*i+1] * U[5*i+1] + U[5*i+2] * U[5*i+2] + U[5*i+3] * U[5*i+3])/ U[5*i+0]) * (GAMMA - 1);
+    phys[8*i+0] = U[8*i+0];
+    phys[8*i+1] = U[8*i+1] / U[8*i+0];
+    phys[8*i+2] = U[8*i+2] / U[8*i+0];
+    phys[8*i+3] = U[8*i+3] / U[8*i+0];
+    phys[8*i+4] = (U[8*i+4] - 0.5 * (U[8*i+1] * U[8*i+1] + U[8*i+2] * U[8*i+2] + U[8*i+3] * U[8*i+3])/ U[8*i+0]) * (GAMMA - 1);
+    phys[8*i+5] = U[8*i+5];
+    phys[8*i+6] = U[8*i+6];
+    phys[8*i+7] = U[8*i+7];
   }
 }
 
@@ -191,7 +236,7 @@ __global__ void init_water_oil_3d(float *physical, int NCell)
     x = XMIN + dx * i;
     y = YMIN + dy * j;
     z = ZMIN + dz * k;
-    N = 5*threadID;
+    N = 8*threadID;
     if (z < 0.0) {
       physical[N+0] = rhol;
       physical[N+1] = 0.0;
@@ -210,6 +255,9 @@ __global__ void init_water_oil_3d(float *physical, int NCell)
       //physical[N+3] = 0.01*(1. + cos(4*PI*x))*(1. + cos(4*PI*z/3.))/4.;
       physical[N+4] = P0-rhoh*G*(z);
     }
+    physical[N+5] = 0.0;
+    physical[N+6] = 0.0;
+    physical[N+7] = 0.0;
   }
 }
 
@@ -273,11 +321,11 @@ void output_file2(float *U,float t){
   int i=0, j, k, N;
   float xstep, ystep, zstep;
   Grid  (&xstep, &ystep, &zstep);
-  int Sx = 5*Y*Z, Sy = 5*Z, Sz = 5;
+  int Sx = 8*Y*Z, Sy = 8*Z, Sz = 8;
   
   char command[160];
   char name[160];
-  float *phys = (float*) malloc (5*X*Y*Z*sizeof(float));
+  float *phys = (float*) malloc (8*X*Y*Z*sizeof(float));
   Ucalcinv(phys, U, (X)*(Y)*(Z));
 
   sprintf(command, "rm density_%d_%d_%d_2d.dat",X,Y,Z);
@@ -302,7 +350,8 @@ void output_file2(float *U,float t){
       j = Y/2;
       N = Sx*i+Sy*j+Sz*k;
       fprintf(dens , "%f\t",phys[N]);
-      fprintf(vel  , "%f\t",phys[N+3]);
+      //fprintf(vel  , "%f\t",phys[N+3]);
+      fprintf(vel  , "%f\t",phys[N+6]);
       fprintf(press, "%f\t",phys[N+4]);
     }
     fprintf(dens , "\n");
@@ -328,11 +377,11 @@ void output_file3(float *U, float t){
     int i=0, j, k, N;
     float xstep, ystep, zstep;
     Grid  (&xstep, &ystep, &zstep);
-    int Sx = 5*Y*Z, Sy = 5*Z, Sz = 5;
+    int Sx = 8*Y*Z, Sy = 8*Z, Sz = 8;
     char command[120];
     char name[120];
     
-    float *phys = (float*) malloc (5*X*Y*Z*sizeof(float));
+    float *phys = (float*) malloc (8*X*Y*Z*sizeof(float));
     Ucalcinv(phys, U, (X)*(Y)*(Z));
     
     sprintf(command, "rm density_%d_%d_%d_3d.dat",X,Y,Z);
@@ -369,8 +418,8 @@ void output_file3(float *U, float t){
 
     sprintf(command, "cp density_%d_%d_%d_3d.dat %dx%dx%d/density/%f.dat",X,Y,Z,X,Y,Z,t);
     system(command);
-    //sprintf(command, "cp velocity_%d_%d_%d_3d.dat %dx%dx%d/velocity/%f.dat",X,Y,Z,X,Y,Z,t);
-    //      system(command);
+    sprintf(command, "cp velocity_%d_%d_%d_3d.dat %dx%dx%d/velocity/%f.dat",X,Y,Z,X,Y,Z,t);
+    system(command);
     sprintf(command, "cp pressure_%d_%d_%d_3d.dat %dx%dx%d/pressure/%f.dat",X,Y,Z,X,Y,Z,t);
     system(command);
 
@@ -436,7 +485,7 @@ __device__ float  minmod(float x, float y, float z) {// The minmod function, des
 __global__ void h_BoundaryX(float * phys_temp, float * phys, int NThreads)
 {
   int threadID = blockDim.x * blockIdx.x + threadIdx.x;
-  int Sx = 5*Y*Z, Sy = 5*Z, Sz = 5;
+  int Sx = 8*Y*Z, Sy = 8*Z, Sz = 8;
   int i, j, k, l, N;
 
   if(threadID < NThreads){
@@ -445,7 +494,7 @@ __global__ void h_BoundaryX(float * phys_temp, float * phys, int NThreads)
     k = threadID - (threadID/(Z))*(Z);
     
    
-    for ( l=0; l<5; l++){
+    for ( l=0; l<8; l++){
       N = Sx*i + Sy*j + Sz*k + l;
       if (i<2){
 	phys_temp[N] = phys[N - 2*Sx + X*Sx];
@@ -461,8 +510,8 @@ __global__ void h_BoundaryX(float * phys_temp, float * phys, int NThreads)
 __global__ void h_BoundaryY(float * phys_temp, float * phys, int NThreads)
 {
   int threadID = blockDim.x * blockIdx.x + threadIdx.x;
-  int Sx = 5*Y*Z, Sy = 5*Z, Sz = 5;
-  int Sx2 = 5*(Y+4)*Z, Sy2 = 5*Z, Sz2 = 5;
+  int Sx = 8*Y*Z, Sy = 8*Z, Sz = 8;
+  int Sx2 = 8*(Y+4)*Z, Sy2 = 8*Z, Sz2 = 8;
   int i, j, k, l, N;
 
   if(threadID < NThreads){
@@ -470,7 +519,7 @@ __global__ void h_BoundaryY(float * phys_temp, float * phys, int NThreads)
     j = threadID/(Z) - i*(Y+4);
     k = threadID - (threadID/(Z))*(Z);
     
-    for ( l=0; l<5; l++){
+    for ( l=0; l<8; l++){
       N = Sx2*i + Sy2*j + Sz2*k + l;
       if (j<2){
 	phys_temp[N] = phys[Sx*i + Sy*(j+Y-2) + Sz*k + l];
@@ -487,8 +536,8 @@ __global__ void h_BoundaryY(float * phys_temp, float * phys, int NThreads)
 __global__ void h_BoundaryZ(float * phys_temp, float * phys, int NThreads)
 {
   int threadID = blockDim.x * blockIdx.x + threadIdx.x;
-  int Sx = 5*Y*Z, Sy = 5*Z, Sz = 5;
-  int Sx2 = 5*Y*(Z+4), Sy2 = 5*(Z+4), Sz2 = 5;
+  int Sx = 8*Y*Z, Sy = 8*Z, Sz = 8;
+  int Sx2 = 8*Y*(Z+4), Sy2 = 8*(Z+4), Sz2 = 8;
   int i, j, k, l, N;
 
   if(threadID < NThreads){
@@ -496,7 +545,7 @@ __global__ void h_BoundaryZ(float * phys_temp, float * phys, int NThreads)
     j = threadID/(Z+4) - i*(Y);
     k = threadID - (threadID/(Z+4))*(Z+4);
 
-    for ( l=0; l<5; l++){
+    for ( l=0; l<8; l++){
       N = Sx2*i + Sy2*j + Sz2*k + l;
       if      (k==0) {
 	    if    (l==3)  phys_temp[N] = -phys[Sx*i+Sy*j+Sz*(1)+l];
@@ -523,7 +572,7 @@ __global__ void h_BoundaryZ(float * phys_temp, float * phys, int NThreads)
 __global__ void h_StateX(float* physL, float* physR, float * phys_temp, int NTreads)
 {
   int i,j,k,l,N;
-  int Sx = 5*Y*Z, Sy = 5*Z, Sz = 5;
+  int Sx = 8*Y*Z, Sy = 8*Z, Sz = 8;
   int threadID = blockDim.x*blockIdx.x + threadIdx.x;
   __shared__ float local_phys[BLOCK_SIZE*4];
 
@@ -532,7 +581,7 @@ __global__ void h_StateX(float* physL, float* physR, float * phys_temp, int NTre
     j = threadID/(Z) - i*(Y);
     k = threadID - (threadID/(Z))*(Z);
     
-    for(l = 0; l < 5; l++){
+    for(l = 0; l < 8; l++){
       N = Sx*i + Sy*j + Sz*k + l;
       local_phys[4*threadIdx.x + 0] = phys_temp[N];
       local_phys[4*threadIdx.x + 1] = phys_temp[N+Sx];
@@ -549,8 +598,8 @@ __global__ void h_StateX(float* physL, float* physR, float * phys_temp, int NTre
 __global__ void h_StateY(float* physL, float* physR, float * phys_temp, int NTreads)
 {
   int i,j,k,l,N,N2;
-  int Sx = 5*(Y+1)*Z, Sy = 5*Z, Sz = 5;
-  int Sx2 = 5*(Y+4)*Z, Sy2 = 5*Z, Sz2 = 5;
+  int Sx = 8*(Y+1)*Z, Sy = 8*Z, Sz = 8;
+  int Sx2 = 8*(Y+4)*Z, Sy2 = 8*Z, Sz2 = 8;
   int threadID = blockDim.x*blockIdx.x + threadIdx.x;
   __shared__ float local_phys[BLOCK_SIZE*4];
   
@@ -559,7 +608,7 @@ __global__ void h_StateY(float* physL, float* physR, float * phys_temp, int NTre
     j = threadID/(Z) - i*(Y+1);
     k = threadID - (threadID/(Z))*(Z);
     
-    for(l = 0; l < 5; l++){
+    for(l = 0; l < 8; l++){
       N = Sx*i + Sy*j + Sz*k + l;
       N2 = Sx2*i + Sy2*j + Sz2*k + l;
       local_phys[4*threadIdx.x + 0] = phys_temp[N2];
@@ -578,8 +627,8 @@ __global__ void h_StateY(float* physL, float* physR, float * phys_temp, int NTre
 __global__ void h_StateZ(float* physL, float* physR, float* phys_temp, int NTreads)
 {
   int i,j,k,l,N,N2;
-  int Sx = 5*Y*(Z+1), Sy = 5*(Z+1), Sz = 5;
-  int Sx2 = 5*Y*(Z+4), Sy2 = 5*(Z+4), Sz2 = 5;
+  int Sx = 8*Y*(Z+1), Sy = 8*(Z+1), Sz = 8;
+  int Sx2 = 8*Y*(Z+4), Sy2 = 8*(Z+4), Sz2 = 8;
   int threadID = blockDim.x*blockIdx.x + threadIdx.x;
   __shared__ float local_phys[BLOCK_SIZE*4];
 
@@ -588,7 +637,7 @@ __global__ void h_StateZ(float* physL, float* physR, float* phys_temp, int NTrea
     j = threadID/(Z+1) - i*(Y);
     k = threadID - (threadID/(Z+1))*(Z+1);
     
-    for(l = 0; l < 5; l++){
+    for(l = 0; l < 8; l++){
       N = Sx*i + Sy*j + Sz*k + l;
       N2 = Sx2*i + Sy2*j + Sz2*k + l;
 
@@ -610,7 +659,7 @@ __global__ void h_FluxMidX(float* F_mid, float* global_max, float* FL, float *FR
   int i, j, k, l,N;
   float AlphaPlus,AlphaMinus,max;
   float SoundSpeedL, SoundSpeedR;
-  int Sx = 5*(Y)*(Z), Sy = 5*(Z), Sz = 5;
+  int Sx = 8*(Y)*(Z), Sy = 8*(Z), Sz = 8;
   int threadID = blockDim.x*blockIdx.x + threadIdx.x;
   if(threadID < NThreads){
     i = threadID/(Y*Z);
@@ -628,7 +677,7 @@ __global__ void h_FluxMidX(float* F_mid, float* global_max, float* FL, float *FR
     if (AlphaMinus < -physL[N+1] + SoundSpeedL ) AlphaMinus = -physL[N+1] + SoundSpeedL;
     if (AlphaPlus  <  physR[N+1] + SoundSpeedR ) AlphaPlus  =  physR[N+1] + SoundSpeedR;
     if (AlphaMinus < -physR[N+1] + SoundSpeedR ) AlphaMinus = -physR[N+1] + SoundSpeedR;
-    for (l=0; l<5; l++) {
+    for (l=0; l<8; l++) {
       N = Sx*i+Sy*j+Sz*k+l;
       F_mid[N] = (AlphaPlus*FL[N]+AlphaMinus*FR[N]-AlphaMinus*AlphaPlus*(UR[N]-UL[N]))/(AlphaPlus+AlphaMinus);
     }
@@ -692,7 +741,7 @@ __global__ void h_FluxMidY(float* F_mid, float* global_max, float* FL, float *FR
   int i, j, k, l,N;
   float AlphaPlus,AlphaMinus,max;
   float SoundSpeedL, SoundSpeedR;
-  int Sx = 5*(Y+1)*(Z), Sy = 5*(Z), Sz = 5;
+  int Sx = 8*(Y+1)*(Z), Sy = 8*(Z), Sz = 8;
   int threadID = blockDim.x*blockIdx.x + threadIdx.x;
   if(threadID < NThreads){
     i = threadID/((Y+1)*Z);
@@ -710,7 +759,7 @@ __global__ void h_FluxMidY(float* F_mid, float* global_max, float* FL, float *FR
     if (AlphaMinus < -physL[N+2] + SoundSpeedL ) AlphaMinus = -physL[N+2] + SoundSpeedL;
     if (AlphaPlus  <  physR[N+2] + SoundSpeedR ) AlphaPlus  =  physR[N+2] + SoundSpeedR;
     if (AlphaMinus < -physR[N+2] + SoundSpeedR ) AlphaMinus = -physR[N+2] + SoundSpeedR;
-    for (l=0; l<5; l++) {
+    for (l=0; l<8; l++) {
       N = Sx*i+Sy*j+Sz*k+l;
       F_mid[N] = (AlphaPlus*FL[N]+AlphaMinus*FR[N]-AlphaMinus*AlphaPlus*(UR[N]-UL[N]))/(AlphaPlus+AlphaMinus);
     }
@@ -774,7 +823,7 @@ __global__ void h_FluxMidZ(float* F_mid, float* global_max, float* FL, float *FR
   int i, j, k, l,N;
   float AlphaPlus,AlphaMinus,max;
   float SoundSpeedL, SoundSpeedR;
-  int Sx = 5*(Y)*(Z+1), Sy = 5*(Z+1), Sz = 5;
+  int Sx = 8*(Y)*(Z+1), Sy = 8*(Z+1), Sz = 8;
   int threadID = blockDim.x*blockIdx.x + threadIdx.x;
   if(threadID < NThreads){
     i = threadID/(Y*(Z+1));
@@ -792,7 +841,7 @@ __global__ void h_FluxMidZ(float* F_mid, float* global_max, float* FL, float *FR
     if (AlphaMinus < -physL[N+3] + SoundSpeedL ) AlphaMinus = -physL[N+3] + SoundSpeedL;
     if (AlphaPlus  <  physR[N+3] + SoundSpeedR ) AlphaPlus  =  physR[N+3] + SoundSpeedR;
     if (AlphaMinus < -physR[N+3] + SoundSpeedR ) AlphaMinus = -physR[N+3] + SoundSpeedR;
-    for (l=0; l<5; l++) {
+    for (l=0; l<8; l++) {
       N = Sx*i+Sy*j+Sz*k+l;
       F_mid[N] = (AlphaPlus*FL[N]+AlphaMinus*FR[N]-AlphaMinus*AlphaPlus*(UR[N]-UL[N]))/(AlphaPlus+AlphaMinus);
     }
@@ -915,7 +964,7 @@ void riemansolverX(float *F_mid, float *U, float *max)
   int threadsPerBlock, blocksPerGrid;
   /*************Ucalcinv********/
   float* phys; 
-  cudaMalloc(&phys, 5*(X)*(Y)*(Z)*sizeof(float));
+  cudaMalloc(&phys, 8*(X)*(Y)*(Z)*sizeof(float));
   threadsPerBlock = BLOCK_SIZE;
   blocksPerGrid =    				\
     ((X)*(Y)*(Z) + threadsPerBlock - 1) / threadsPerBlock;
@@ -923,7 +972,7 @@ void riemansolverX(float *F_mid, float *U, float *max)
   /*******************************/
   /*************Set_Boundary******************/
   float *phys_temp; 
-  cudaMalloc(&phys_temp, 5*(X+4)*(Y)*(Z)*sizeof(float));
+  cudaMalloc(&phys_temp, 8*(X+4)*(Y)*(Z)*sizeof(float));
 
   blocksPerGrid =						\
     ((X+4)*(Y)*(Z) + threadsPerBlock - 1) / threadsPerBlock;
@@ -934,9 +983,9 @@ void riemansolverX(float *F_mid, float *U, float *max)
 
   /************Set_physState********************/
   float *physL;
-  cudaMalloc(&physL, 5*(X+1)*(Y)*(Z)*sizeof(float));
+  cudaMalloc(&physL, 8*(X+1)*(Y)*(Z)*sizeof(float));
   float *physR;
-  cudaMalloc(&physR, 5*(X+1)*(Y)*(Z)*sizeof(float));
+  cudaMalloc(&physR, 8*(X+1)*(Y)*(Z)*sizeof(float));
 
   blocksPerGrid =						\
     ((X+1)*(Y)*(Z) + threadsPerBlock - 1) / threadsPerBlock;
@@ -948,9 +997,9 @@ void riemansolverX(float *F_mid, float *U, float *max)
 
   /***********Calc_Flux****************/
   float *FLX;
-  cudaMalloc(&FLX, 5*(X+1)*(Y)*(Z)*sizeof(float));
+  cudaMalloc(&FLX, 8*(X+1)*(Y)*(Z)*sizeof(float));
   float *FRX;
-  cudaMalloc(&FRX, 5*(X+1)*(Y)*(Z)*sizeof(float));
+  cudaMalloc(&FRX, 8*(X+1)*(Y)*(Z)*sizeof(float));
   blocksPerGrid =						\
     ((X+1)*(Y)*(Z) + threadsPerBlock - 1) / threadsPerBlock;
   h_FluxCalcPX_N<<<blocksPerGrid, threadsPerBlock>>>(FLX,  physL, (X+1)*(Y)*(Z));
@@ -960,9 +1009,9 @@ void riemansolverX(float *F_mid, float *U, float *max)
 
   /********Calc U*****************/
   float* UL;
-  cudaMalloc(&UL, 5*(X+1)*(Y)*(Z)*sizeof(float));
+  cudaMalloc(&UL, 8*(X+1)*(Y)*(Z)*sizeof(float));
   float* UR;
-  cudaMalloc(&UR, 5*(X+1)*(Y)*(Z)*sizeof(float));
+  cudaMalloc(&UR, 8*(X+1)*(Y)*(Z)*sizeof(float));
   blocksPerGrid =						\
     ((X+1)*(Y)*(Z) + threadsPerBlock - 1) / threadsPerBlock;  
   h_Ucalc<<<blocksPerGrid, threadsPerBlock>>>(UL, physL, (X+1)*(Y)*(Z));
@@ -1032,14 +1081,14 @@ void riemansolverY(float *F_mid, float *U, float *max)
   threadsPerBlock = BLOCK_SIZE;
   /**************Ucalcinv*********/
   float* phys; 
-  cudaMalloc(&phys, 5*(X)*(Y)*(Z)*sizeof(float));
+  cudaMalloc(&phys, 8*(X)*(Y)*(Z)*sizeof(float));
   blocksPerGrid =    				\
     ((X)*(Y)*(Z) + threadsPerBlock - 1) / threadsPerBlock;
   h_Ucalcinv<<<blocksPerGrid, threadsPerBlock>>>(phys,U,(X)*(Y)*(Z));
   /****************************/
   /*************Set_Boundary*********/
   float *phys_temp; 
-  cudaMalloc(&phys_temp, 5*(X)*(Y+4)*(Z)*sizeof(float));  
+  cudaMalloc(&phys_temp, 8*(X)*(Y+4)*(Z)*sizeof(float));  
   blocksPerGrid =						\
     ((X)*(Y+4)*(Z) + threadsPerBlock - 1) / threadsPerBlock;
   h_BoundaryY<<<blocksPerGrid, threadsPerBlock>>>(phys_temp, phys, (X)*(Y+4)*(Z));
@@ -1051,9 +1100,9 @@ void riemansolverY(float *F_mid, float *U, float *max)
   
   /***********Set_physState***************/
   float *physL;
-  cudaMalloc(&physL, 5*(X)*(Y+1)*(Z)*sizeof(float));
+  cudaMalloc(&physL, 8*(X)*(Y+1)*(Z)*sizeof(float));
   float *physR;
-  cudaMalloc(&physR, 5*(X)*(Y+1)*(Z)*sizeof(float));
+  cudaMalloc(&physR, 8*(X)*(Y+1)*(Z)*sizeof(float));
   blocksPerGrid =						\
     ((X)*(Y+1)*(Z) + threadsPerBlock - 1) / threadsPerBlock;
   
@@ -1064,9 +1113,9 @@ void riemansolverY(float *F_mid, float *U, float *max)
 
   /***********************************/
   float *FLY;
-  cudaMalloc(&FLY, 5*(X)*(Y+1)*(Z)*sizeof(float));
+  cudaMalloc(&FLY, 8*(X)*(Y+1)*(Z)*sizeof(float));
   float *FRY;
-  cudaMalloc(&FRY, 5*(X)*(Y+1)*(Z)*sizeof(float));
+  cudaMalloc(&FRY, 8*(X)*(Y+1)*(Z)*sizeof(float));
   blocksPerGrid =						\
     ((X)*(Y+1)*(Z) + threadsPerBlock - 1) / threadsPerBlock;  
   h_FluxCalcPY_N<<<blocksPerGrid, threadsPerBlock>>>(FLY,  physL, (X)*(Y+1)*(Z));
@@ -1076,9 +1125,9 @@ void riemansolverY(float *F_mid, float *U, float *max)
   
   /****************Calc U**********/
   float* UL;
-  cudaMalloc(&UL, 5*(X)*(Y+1)*(Z)*sizeof(float));
+  cudaMalloc(&UL, 8*(X)*(Y+1)*(Z)*sizeof(float));
   float* UR;
-  cudaMalloc(&UR, 5*(X)*(Y+1)*(Z)*sizeof(float));
+  cudaMalloc(&UR, 8*(X)*(Y+1)*(Z)*sizeof(float));
   blocksPerGrid =						\
     ((X)*(Y+1)*(Z) + threadsPerBlock - 1) / threadsPerBlock;  
   h_Ucalc<<<blocksPerGrid, threadsPerBlock>>>(UL, physL, (X)*(Y+1)*(Z));
@@ -1125,7 +1174,7 @@ void riemansolverZ(float *F_mid, float *U, float *max)
   threadsPerBlock = BLOCK_SIZE;
   /*********Ucalcinv*************/
   float* phys; 
-  cudaMalloc(&phys, 5*(X)*(Y)*(Z)*sizeof(float));
+  cudaMalloc(&phys, 8*(X)*(Y)*(Z)*sizeof(float));
   blocksPerGrid =						\
     ((X)*(Y)*(Z) + threadsPerBlock - 1) / threadsPerBlock;
   h_Ucalcinv<<<blocksPerGrid, threadsPerBlock>>>(phys,U,(X)*(Y)*(Z));
@@ -1133,7 +1182,7 @@ void riemansolverZ(float *F_mid, float *U, float *max)
   /******************************/
   /**********Set_Boundary*******/
   float *phys_temp; 
-  cudaMalloc(&phys_temp, 5*(X)*(Y)*(Z+4)*sizeof(float));
+  cudaMalloc(&phys_temp, 8*(X)*(Y)*(Z+4)*sizeof(float));
   blocksPerGrid =						\
     ((X)*(Y)*(Z+4) + threadsPerBlock - 1) / threadsPerBlock;
   h_BoundaryZ<<<blocksPerGrid, threadsPerBlock>>>(phys_temp, phys, (X)*(Y)*(Z+4));
@@ -1144,9 +1193,9 @@ void riemansolverZ(float *F_mid, float *U, float *max)
 
   /***********Set_physState******/
   float *physL;
-  cudaMalloc(&physL, 5*(X)*(Y)*(Z+1)*sizeof(float));
+  cudaMalloc(&physL, 8*(X)*(Y)*(Z+1)*sizeof(float));
   float *physR;
-  cudaMalloc(&physR, 5*(X)*(Y)*(Z+1)*sizeof(float));
+  cudaMalloc(&physR, 8*(X)*(Y)*(Z+1)*sizeof(float));
 
 
   blocksPerGrid =						\
@@ -1161,9 +1210,9 @@ void riemansolverZ(float *F_mid, float *U, float *max)
 
   /**********Calc_Flux***********/
   float *FLZ;
-  cudaMalloc(&FLZ, 5*(X)*(Y)*(Z+1)*sizeof(float));
+  cudaMalloc(&FLZ, 8*(X)*(Y)*(Z+1)*sizeof(float));
   float *FRZ;
-  cudaMalloc(&FRZ, 5*(X)*(Y)*(Z+1)*sizeof(float));
+  cudaMalloc(&FRZ, 8*(X)*(Y)*(Z+1)*sizeof(float));
   blocksPerGrid =						\
     ((X)*(Y)*(Z+1) + threadsPerBlock - 1) / threadsPerBlock;
   
@@ -1174,9 +1223,9 @@ void riemansolverZ(float *F_mid, float *U, float *max)
 
   /***********Calc U************/
   float* UL;
-  cudaMalloc(&UL, 5*(X)*(Y)*(Z+1)*sizeof(float));
+  cudaMalloc(&UL, 8*(X)*(Y)*(Z+1)*sizeof(float));
   float* UR;
-  cudaMalloc(&UR, 5*(X)*(Y)*(Z+1)*sizeof(float));
+  cudaMalloc(&UR, 8*(X)*(Y)*(Z+1)*sizeof(float));
   blocksPerGrid =						\
     ((X)*(Y)*(Z+1) + threadsPerBlock - 1) / threadsPerBlock;
   
@@ -1237,10 +1286,60 @@ __global__ void h_Set_Potential(float *Potential, float dx, float dy, float dz, 
     Potential[N] = G * z;
   }
 }
-__global__ void h_Cal_Source(float *Source, float *phys, float GridRatioX, \
+
+__global__ void h_Cal_temp(float *phys, float *temp, float dx, float dy, float dz, int NThreads) 
+{
+  int i,j,k,N,Nf;
+  int threadID = blockIdx.x * blockDim.x + threadIdx.x;
+  int Sx = (Y)*(Z), Sy = (Z), Sz = 1;
+  float ee = 6.02e23 * 1.6e-19 * 1.e3;
+
+  if(threadID < NThreads){
+    i = threadID/(Y)*(Z);
+    j = threadID/(Z) - i*(Y);
+    k = threadID - (threadID/(Z))*(Z);
+    N = i*Sx*3+j*Sy*3+k*3;
+    Nf = i*Sx*8+j*Sy*8+k*8;
+    if(k>0&&k<Z-1) {
+      temp[N]   = GradientX(phys, Nf, 8, 4, dx) / (phys[Nf]*ee);
+      temp[N+1] = GradientY(phys, Nf, 8, 4, dy) / (phys[Nf]*ee);
+      temp[N+2] = GradientZ(phys, Nf, 8, 4, dz) / (phys[Nf]*ee);
+    }
+    else {
+      temp[N] = 0.0;
+      temp[N+1] = 0.0;
+      temp[N+2] = 0.0;
+    }
+  }
+}
+
+__global__ void h_Cal_temp2(float *temp, float *temp2, float dx, float dy, float dz, int NThreads) 
+{
+  int i,j,k,N;
+  int threadID = blockIdx.x * blockDim.x + threadIdx.x;
+  int Sx = (Y)*(Z), Sy = (Z), Sz = 1;
+  
+  if(threadID < NThreads){
+    i = threadID/(Y)*(Z);
+    j = threadID/(Z) - i*(Y);
+    k = threadID - (threadID/(Z))*(Z);
+    N = i*Sx*3+j*Sy*3+k*3;
+    if(k>0&&k<Z-1) {
+      temp2[N]   = GradientY(temp, N, 3, 2, dy)-GradientZ(temp, N, 3, 1, dz);
+      temp2[N+1] = GradientZ(temp, N, 3, 0, dz)-GradientX(temp, N, 3, 2, dx);
+      temp2[N+2] = GradientX(temp, N, 3, 1, dx)-GradientY(temp, N, 3, 0, dy);
+    }
+    else {
+      temp2[N] = 0.0;
+      temp2[N+1] = 0.0;
+      temp2[N+2] = 0.0;
+    }
+  }
+}
+__global__ void h_Cal_Source(float *Source, float *phys, float *temp2, float GridRatioX, \
 			float GridRatioY, float GridRatioZ, float dt, int NThreads)
 {
-  int i,j,k, Nf;
+  int i,j,k,N,Nf;
   int threadID = blockIdx.x * blockDim.x + threadIdx.x;
   int Sx = (Y)*(Z), Sy = (Z), Sz = 1;
   float gx, gy, gz;
@@ -1252,20 +1351,28 @@ __global__ void h_Cal_Source(float *Source, float *phys, float GridRatioX, \
     gx = 0;//(Potential[N + Sx2] - Potential[N - Sx2]) * GridRatioX / 2;
     gy = 0;//(Potential[N + Sy2] - Potential[N - Sy2]) * GridRatioY / 2;
     gz = G * dt;//(Potential[N + Sz2] - Potential[N - Sz2]) * GridRatioZ / 2;
-    Nf = 5*(i*Sx + j*Sy + k*Sz);
+    Nf = 8*(i*Sx + j*Sy + k*Sz);
+    N = 3*(i*Sx + j*Sy + k*Sz);
+    Source[Nf+0] = GradientZ(phys, Nf, 8, 0, 1.);
     Source[Nf+0] = 0.;
     Source[Nf+1] = - gx * phys[Nf+0];
     Source[Nf+2] = - gy * phys[Nf+0];
     Source[Nf+3] = - gz * phys[Nf+0];
     Source[Nf+4] = - phys[Nf+0]*(gx * phys[Nf+1] + gy * phys[Nf+2]\
 				 + gz * phys[Nf+3]);
+    Source[Nf+5] = temp2[N]   * dt;
+    Source[Nf+6] = temp2[N+1] * dt;
+    Source[Nf+7] = temp2[N+2] * dt;
   }
 }
     
 void h_Fluxsource( float *Source, float *U, float *dt)
 {
   float *phys;
-  cudaMalloc(&phys, 5*(X)*(Y)*(Z)*sizeof(float));
+  float *temp, *temp2;
+  cudaMalloc(&phys, 8*(X)*(Y)*(Z)*sizeof(float));
+  cudaMalloc(&temp, 3*(X)*(Y)*(Z)*sizeof(float));
+  cudaMalloc(&temp2, 3*(X)*(Y)*(Z)*sizeof(float));
 
   float dx, dy, dz;
 
@@ -1291,8 +1398,12 @@ void h_Fluxsource( float *Source, float *U, float *dt)
     
   blocksPerGrid = \
     ((X)*(Y)*(Z) + threadsPerBlock - 1) / threadsPerBlock; 
-  h_Cal_Source<<<blocksPerGrid, threadsPerBlock>>>(Source, phys, GridRatioX, GridRatioY, GridRatioZ, *dt, (X)*(Y)*(Z));
+  h_Cal_temp<<<blocksPerGrid, threadsPerBlock>>>(phys, temp, dx, dy, dz, (X)*(Y)*(Z));
+  h_Cal_temp2<<<blocksPerGrid, threadsPerBlock>>>(temp, temp2, dx, dy, dz, (X)*(Y)*(Z));
+  h_Cal_Source<<<blocksPerGrid, threadsPerBlock>>>(Source, phys, temp2, GridRatioX, GridRatioY, GridRatioZ, *dt, (X)*(Y)*(Z));
   cudaFree(phys);
+  cudaFree(temp);
+  cudaFree(temp2);
   //cudaFree(Potential);
   //Check_CUDA_Error("at Fluxsource: cudaFree Potential");
 
@@ -1304,10 +1415,10 @@ __global__ void h_U_update1(float *U1, float *U_old,\
 			    int NThreads)
 {
   int i,j,k,N,Nx,Ny,Nz;
-  int Sx  = 5*Y*Z,     Sy = 5*Z,      Sz = 5;
-  int Sxx = 5*Y*Z,     Syx = 5*Z,     Szx = 5;
-  int Sxy = 5*(Y+1)*Z, Syy = 5*Z,     Szy = 5;
-  int Sxz = 5*Y*(Z+1), Syz = 5*(Z+1), Szz = 5;
+  int Sx  = 8*Y*Z,     Sy = 8*Z,      Sz = 8;
+  int Sxx = 8*Y*Z,     Syx = 8*Z,     Szx = 8;
+  int Sxy = 8*(Y+1)*Z, Syy = 8*Z,     Szy = 8;
+  int Sxz = 8*Y*(Z+1), Syz = 8*(Z+1), Szz = 8;
   
   int threadID = blockIdx.x * blockDim.x + threadIdx.x;
   __shared__ float d_FmidX[BLOCK_SIZE*2];
@@ -1319,7 +1430,7 @@ __global__ void h_U_update1(float *U1, float *U_old,\
     i = threadID/((Y)*(Z));
     j = threadID/(Z) - i*(Y);
     k = threadID - (threadID/(Z))*(Z);
-    for(int l=0; l<5; l++){
+    for(int l=0; l<8; l++){
       N  = i*Sx + j*Sy + k*Sz + l;
       Nx = i*Sxx + j*Syx + k*Szx + l;
       Ny = i*Sxy + j*Syy + k*Szy + l;
@@ -1346,10 +1457,10 @@ __global__ void h_U_update2(float *U2, float *U1, float *U_old, \
 			    int NThreads)
 {
   int i,j,k,N,Nx,Ny,Nz;
-  int Sx  = 5*Y*Z,     Sy = 5*Z,      Sz = 5;
-  int Sxx = 5*Y*Z,     Syx = 5*Z,     Szx = 5;
-  int Sxy = 5*(Y+1)*Z, Syy = 5*Z,     Szy = 5;
-  int Sxz = 5*Y*(Z+1), Syz = 5*(Z+1), Szz = 5;
+  int Sx  = 8*Y*Z,     Sy = 8*Z,      Sz = 8;
+  int Sxx = 8*Y*Z,     Syx = 8*Z,     Szx = 8;
+  int Sxy = 8*(Y+1)*Z, Syy = 8*Z,     Szy = 8;
+  int Sxz = 8*Y*(Z+1), Syz = 8*(Z+1), Szz = 8;
   
   int threadID = blockIdx.x * blockDim.x + threadIdx.x;
   __shared__ float d_FmidX[BLOCK_SIZE*2];
@@ -1362,7 +1473,7 @@ __global__ void h_U_update2(float *U2, float *U1, float *U_old, \
     i = threadID/((Y)*(Z));
     j = threadID/(Z) - i*(Y);
     k = threadID - (threadID/(Z))*(Z);
-    for(int l=0; l<5; l++){
+    for(int l=0; l<8; l++){
       N  = i*Sx + j*Sy + k*Sz + l;
 
       Nx = i*Sxx + j*Syx + k*Szx + l;
@@ -1391,17 +1502,17 @@ __global__ void h_U_update3(float *U_new, float *U2, float *U_old,float *Source,
 			    int NThreads)
 {
   int i,j,k,N,Nx,Ny,Nz;
-  int Sx  = 5*Y*Z,     Sy = 5*Z,      Sz = 5;
-  int Sxx = 5*Y*Z,     Syx = 5*Z,     Szx = 5;
-  int Sxy = 5*(Y+1)*Z, Syy = 5*Z,     Szy = 5;
-  int Sxz = 5*Y*(Z+1), Syz = 5*(Z+1), Szz = 5;
+  int Sx  = 8*Y*Z,     Sy = 8*Z,      Sz = 8;
+  int Sxx = 8*Y*Z,     Syx = 8*Z,     Szx = 8;
+  int Sxy = 8*(Y+1)*Z, Syy = 8*Z,     Szy = 8;
+  int Sxz = 8*Y*(Z+1), Syz = 8*(Z+1), Szz = 8;
   
   int threadID = blockIdx.x * blockDim.x + threadIdx.x;
   if(threadID < NThreads){
     i = threadID/((Y)*(Z));
     j = threadID/(Z) - i*(Y);
     k = threadID - (threadID/(Z))*(Z);
-    for(int l=0; l<5; l++){
+    for(int l=0; l<8; l++){
       N  = i*Sx + j*Sy + k*Sz + l;
 
       Nx = i*Sxx + j*Syx + k*Szx + l;
@@ -1436,7 +1547,7 @@ void Advance(float *U_new, float *U_old, float *dt){
   /*******riemansolverX***********/
   //  get_timestamp(&time1);
   float *d_FmidX;
-  cudaMalloc((void **)&d_FmidX, 5*(X+1)*(Y)*(Z)*sizeof(float));
+  cudaMalloc((void **)&d_FmidX, 8*(X+1)*(Y)*(Z)*sizeof(float));
   riemansolverX(d_FmidX, U_old, &max);
   //cudaDeviceSynchronize();
   //get_timestamp(&time2);
@@ -1453,25 +1564,25 @@ void Advance(float *U_new, float *U_old, float *dt){
   
   /*******riemansolverZ*********/
   float *d_FmidZ;
-  cudaMalloc((void **)&d_FmidZ, 5*(X)*(Y)*(Z+1)*sizeof(float));
+  cudaMalloc((void **)&d_FmidZ, 8*(X)*(Y)*(Z+1)*sizeof(float));
   riemansolverZ(d_FmidZ, U_old, &max);
   if( max > h_maxZ ) h_maxZ = max;
 
   /*******riemansolverY**********/
   float *d_FmidY;
-  cudaMalloc((void **)&d_FmidY, 5*(X)*(Y+1)*(Z)*sizeof(float));
+  cudaMalloc((void **)&d_FmidY, 8*(X)*(Y+1)*(Z)*sizeof(float));
   riemansolverY(d_FmidY, U_old, &max);
   if( max > h_maxY ) h_maxY = max;
   
  
   /******Fluxsource**************/
   float *d_Source;
-  cudaMalloc((void **)&d_Source, 5*(X)*(Y)*(Z)*sizeof(float));
+  cudaMalloc((void **)&d_Source, 8*(X)*(Y)*(Z)*sizeof(float));
   h_Fluxsource(d_Source, U_old, dt);
   cudaDeviceSynchronize();
   /***********U_update************/
   float *d_U1;
-  cudaMalloc((void **)&d_U1, 5*(X)*(Y)*(Z)*sizeof(float));  
+  cudaMalloc((void **)&d_U1, 8*(X)*(Y)*(Z)*sizeof(float));  
   blocksPerGrid = \
     ( (X)*(Y)*(Z) + threadsPerBlock - 1)/threadsPerBlock;
   h_U_update1<<<blocksPerGrid, threadsPerBlock>>>(d_U1, U_old, \
@@ -1489,7 +1600,7 @@ void Advance(float *U_new, float *U_old, float *dt){
 
 
   float *d_U2;
-  cudaMalloc((void **)&d_U2, 5*(X)*(Y)*(Z)*sizeof(float));
+  cudaMalloc((void **)&d_U2, 8*(X)*(Y)*(Z)*sizeof(float));
   blocksPerGrid = \
     ( (X)*(Y)*(Z) + threadsPerBlock - 1)/threadsPerBlock;
   h_U_update2<<<blocksPerGrid, threadsPerBlock>>>(d_U2, d_U1, U_old, \
@@ -1537,14 +1648,14 @@ int main()
 {
   int NCell = (X)*(Y)*(Z);
   size_t size;
-  float *h_U = (float *) malloc(5*(X)*(Y)*(Z)*sizeof(float));
+  float *h_U = (float *) malloc(8*(X)*(Y)*(Z)*sizeof(float));
   float dt = 0.00001;
   float t = 0 ;
   int k=0,l=0;
   
   Creat_folder();//Creat folder to store data;
   /*****************/
-  size = 5*(X)*(Y)*(Z)*sizeof(float);
+  size = 8*(X)*(Y)*(Z)*sizeof(float);
   float *d_phys;
   cudaMalloc((void **)&d_phys,size );
   float *d_U;
@@ -1576,9 +1687,9 @@ int main()
   while(t < tmax){
     t+=dt;
     Advance(d_U_adv, d_U, &dt);
-    cudaMemcpy(d_U, d_U_adv, 5*(X)*(Y)*(Z)*sizeof(float), cudaMemcpyDeviceToDevice);
-    if( t >0.05 * k){
-      cudaMemcpy(h_U, d_U, 5*(X)*(Y)*(Z)*sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(d_U, d_U_adv, 8*(X)*(Y)*(Z)*sizeof(float), cudaMemcpyDeviceToDevice);
+    if( t >0.5 * k){
+      cudaMemcpy(h_U, d_U, 8*(X)*(Y)*(Z)*sizeof(float), cudaMemcpyDeviceToHost);
       output_file3(h_U, t);
       output_file2(h_U, t);
       k++;
