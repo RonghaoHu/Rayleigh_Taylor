@@ -6,24 +6,26 @@
 #include<stdlib.h>
 #include "timing.h"
 #define PI    3.14159265
-#define G     .1
+#define Z_ion 1.0
+#define A_ion 2.0
+#define G     6.e13
 #define GAMMA 1.4
-#define X 32
-#define Y 32
-#define Z 96
-#define XMIN -.25
-#define XMAX .25
-#define YMIN -.25
-#define YMAX .25
-#define ZMIN -.75
-#define ZMAX .75
+#define X 50
+#define Y 50
+#define Z 100
+#define XMIN -0.0001
+#define XMAX 0.0001
+#define YMIN -0.0001
+#define YMAX 0.0001
+#define ZMIN -0.0006
+#define ZMAX 0.0006
 #define THETA 2.0
-#define tmax 12.
+#define tmax 15.e-9
 
 #define BLOCK_SIZE 256
-__constant__ float P0 = 2.5;
-__constant__ float rhol = 1.;
-__constant__ float rhoh = 2.;
+__constant__ float P0 = 1.2e16;
+__constant__ float rhol = 33.e3;
+__constant__ float rhoh = 66.e3;
 
 
 void Grid(float *gridX, float *gridY, float *gridZ) {
@@ -226,6 +228,7 @@ __global__ void init_water_oil_3d(float *physical, int NCell)
   float dx, dy, dz;
   float x, y, z;
   int threadID = blockDim.x * blockIdx.x + threadIdx.x;
+  double scaleLen = (ZMAX-ZMIN)/20, c_pert;
   d_Grid(&dx,&dy,&dz);
   
   if( threadID < NCell){
@@ -237,27 +240,35 @@ __global__ void init_water_oil_3d(float *physical, int NCell)
     y = YMIN + dy * j;
     z = ZMIN + dz * k;
     N = 8*threadID;
-    if (z < 0.0) {
-      physical[N+0] = rhol;
-      physical[N+1] = 0.0;
-      physical[N+2] = 0.0;
-      physical[N+3] = 0.01*(1. + cosf(2*PI*x/((XMAX)-(XMIN))))*(1. + cosf(2*PI*y/((YMAX)-(YMIN))))*(1.+cosf(2*PI*z/((ZMAX)-(ZMIN))))/8.;
-                    
-      //physical[N+3] = 0.01*(1. + cos(4*PI*x))*(1. + cos(4*PI*y))*(1. + cos(4*PI*z/3.))/8.;
-      //physical[N+3] = 0.01*(1. + cos(4*PI*x))*(1. + cos(4*PI*z/3.))/4.;
-      physical[N+4] = P0-rhol*G*z;
-    } else {
-      physical[N+0] = rhoh;
-      physical[N+1] = 0.0;
-      physical[N+2] = 0.0;
-      physical[N+3] = 0.01*(1. + cosf(2*PI*x/((XMAX)-(XMIN))))*(1. + cosf(2*PI*y/((YMAX)-(YMIN))))*(1.+cosf(2*PI*z/((ZMAX)-(ZMIN))))/8.;
-      //physical[N+3] = 0.01*(1. + cos(4*PI*x))*(1. + cos(4*PI*y))*(1. + cos(4*PI*z/3.))/8.;
-      //physical[N+3] = 0.01*(1. + cos(4*PI*x))*(1. + cos(4*PI*z/3.))/4.;
-      physical[N+4] = P0-rhoh*G*(z);
-    }
+
+    physical[N+0] = (rhol + rhoh) / 2 + tanh((z)/scaleLen) * (rhoh - rhol) / 2;
+    physical[N+1] = 0.0;
+    physical[N+2] = 0.0;
+    physical[N+3] = 0.0;
+    physical[N+3] = 0.0;
+    c_pert = 1.0 + 0.05 * cos(2 * PI * (x - XMIN) / (XMAX - XMIN)) * cos(2 * PI * (y - YMIN) / (YMAX - YMIN)) * exp(-(z*z)/(scaleLen*scaleLen));
+    physical[N+4] = c_pert * (P0 - G * ((z) * (rhol + rhoh) / 2 + log(cosh((z)/scaleLen))*scaleLen*(rhoh - rhol) / 2));
     physical[N+5] = 0.0;
     physical[N+6] = 0.0;
     physical[N+7] = 0.0;
+    //if (z < 0.0) {
+    //  physical[N+0] = rhol;
+    //  physical[N+1] = 0.0;
+    //  physical[N+2] = 0.0;
+    //  physical[N+3] = -0.01*(1. + cosf(2*PI*x/((XMAX)-(XMIN))))*(1. + cosf(2*PI*y/((YMAX)-(YMIN))))*(1.+cosf(2*PI*z/((ZMAX)-(ZMIN))))/8.;
+    //                
+    //  //physical[N+3] = 0.01*(1. + cos(4*PI*x))*(1. + cos(4*PI*y))*(1. + cos(4*PI*z/3.))/8.;
+    //  //physical[N+3] = 0.01*(1. + cos(4*PI*x))*(1. + cos(4*PI*z/3.))/4.;
+    //  physical[N+4] = P0-rhol*G*z;
+    //} else {
+    //  physical[N+0] = rhoh;
+    //  physical[N+1] = 0.0;
+    //  physical[N+2] = 0.0;
+    //  physical[N+3] = -0.01*(1. + cosf(2*PI*x/((XMAX)-(XMIN))))*(1. + cosf(2*PI*y/((YMAX)-(YMIN))))*(1.+cosf(2*PI*z/((ZMAX)-(ZMIN))))/8.;
+    //  //physical[N+3] = 0.01*(1. + cos(4*PI*x))*(1. + cos(4*PI*y))*(1. + cos(4*PI*z/3.))/8.;
+    //  //physical[N+3] = 0.01*(1. + cos(4*PI*x))*(1. + cos(4*PI*z/3.))/4.;
+    //  physical[N+4] = P0-rhoh*G*(z);
+    //}
   }
 }
 
@@ -351,7 +362,7 @@ void output_file2(float *U,float t){
       N = Sx*i+Sy*j+Sz*k;
       fprintf(dens , "%f\t",phys[N]);
       //fprintf(vel  , "%f\t",phys[N+3]);
-      fprintf(vel  , "%f\t",phys[N+6]);
+      fprintf(vel  , "%e\t",phys[N+6]);
       fprintf(press, "%f\t",phys[N+4]);
     }
     fprintf(dens , "\n");
@@ -374,7 +385,7 @@ void output_file2(float *U,float t){
 
 void output_file3(float *U, float t){
     
-    int i=0, j, k, N;
+    int i=0, j, k, l, N;
     float xstep, ystep, zstep;
     Grid  (&xstep, &ystep, &zstep);
     int Sx = 8*Y*Z, Sy = 8*Z, Sz = 8;
@@ -405,10 +416,13 @@ void output_file3(float *U, float t){
     for (k=0; k<Z; k++) {
         for (i=0; i<X; i++) {
             for (j=0; j<Y; j++) {
-                N = Sx*i+Sy*j+Sz*k;
-                fprintf(dens , "%d\t%d\t%d\t%f\n",i,j,k,phys[N]);
-                fprintf(vel  , "%d\t%d\t%d\t%f\n",i,j,k,phys[N+3]);
-                fprintf(press, "%d\t%d\t%d\t%f\n",i,j,k,phys[N+4]);
+                for (l=0; l<8; l++) {
+                    N = Sx*i+Sy*j+Sz*k+l;
+                    fprintf(dens , "%e\t",phys[N]);
+                    //fprintf(vel  , "%d\t%d\t%d\t%f\n",i,j,k,phys[N+3]);
+                    //fprintf(press, "%d\t%d\t%d\t%f\n",i,j,k,phys[N+4]);
+                }
+                fprintf(dens, "\n");
             }
         }
     }
@@ -1353,7 +1367,6 @@ __global__ void h_Cal_Source(float *Source, float *phys, float *temp2, float Gri
     gz = G * dt;//(Potential[N + Sz2] - Potential[N - Sz2]) * GridRatioZ / 2;
     Nf = 8*(i*Sx + j*Sy + k*Sz);
     N = 3*(i*Sx + j*Sy + k*Sz);
-    Source[Nf+0] = GradientZ(phys, Nf, 8, 0, 1.);
     Source[Nf+0] = 0.;
     Source[Nf+1] = - gx * phys[Nf+0];
     Source[Nf+2] = - gy * phys[Nf+0];
@@ -1649,7 +1662,7 @@ int main()
   int NCell = (X)*(Y)*(Z);
   size_t size;
   float *h_U = (float *) malloc(8*(X)*(Y)*(Z)*sizeof(float));
-  float dt = 0.00001;
+  float dt = 1.e-13;
   float t = 0 ;
   int k=0,l=0;
   
@@ -1688,15 +1701,18 @@ int main()
     t+=dt;
     Advance(d_U_adv, d_U, &dt);
     cudaMemcpy(d_U, d_U_adv, 8*(X)*(Y)*(Z)*sizeof(float), cudaMemcpyDeviceToDevice);
-    if( t >0.5 * k){
+    if( t/1.e-9 >0.5 * k){
       cudaMemcpy(h_U, d_U, 8*(X)*(Y)*(Z)*sizeof(float), cudaMemcpyDeviceToHost);
-      output_file3(h_U, t);
-      output_file2(h_U, t);
+      output_file3(h_U, t/1.e-9);
+      //output_file2(h_U, t/1.e-9);
       k++;
     }
-    printf ("%d| t = %f\n",l,t);
+    printf ("%d| t = %f\n",l,t/1.e-9);
     l++;
   }
+  //cudaMemcpy(h_U, d_U, 8*(X)*(Y)*(Z)*sizeof(float), cudaMemcpyDeviceToHost);
+  //output_file3(h_U, t/1.e-9);
+  //output_file2(h_U, t/1.e-9);
 #endif
   cudaFree(d_U);
   cudaFree(d_U_adv);
