@@ -246,7 +246,7 @@ __global__ void init_water_oil_3d(float *physical, int NCell)
     physical[N+2] = 0.0;
     physical[N+3] = 0.0;
     physical[N+3] = 0.0;
-    c_pert = 1.0 + 0.05 * cos(2 * PI * (x - XMIN) / (XMAX - XMIN)) * cos(2 * PI * (y - YMIN) / (YMAX - YMIN)) * exp(-(z*z)/(scaleLen*scaleLen));
+    c_pert = 1.0 - 0.05 * (1 + cos(2 * PI * (x) / (XMAX - XMIN))) * (1 + cos(2 * PI * (y) / (YMAX - YMIN))) * exp(-(z*z)/(scaleLen*scaleLen));
     physical[N+4] = c_pert * (P0 - G * ((z) * (rhol + rhoh) / 2 + log(cosh((z)/scaleLen))*scaleLen*(rhoh - rhol) / 2));
     physical[N+5] = 0.0;
     physical[N+6] = 0.0;
