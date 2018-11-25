@@ -4,11 +4,18 @@ import sys
 
 Input= sys.argv[1]
 Output= sys.argv[2]
+nx = 200
+ny = 2
+nz = 200
 
 data = loadtxt("%s"%Input)
-z = data
+density = data[:,0].reshape([nx,ny,nz])
+bx = data[:,7].reshape([nx,ny,nz])
+by = data[:,5].reshape([nx,ny,nz])
+bz = data[:,6].reshape([nx,ny,nz])
+
 #title('lalal')
-contourf(z, 40)
+contourf(density[:,0,:], 40, cmap='RdBu')
 colorbar()
 savefig("%s"%Output,dpi=800)
 

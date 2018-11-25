@@ -1,6 +1,6 @@
 #!/bin/bash                                                                     
-INPUT_DIR=../bin/50x50/density/
-OUTPUT_DIR=../bin/50x50/density_out/
+INPUT_DIR=../bin/200x2x200/density/
+OUTPUT_DIR=../bin/200x2x200/density_out/
 
 mkdir $OUTPUT_DIR
 SUFFIX=.png

@@ -1,6 +1,6 @@
 #!/bin/bash                                                                     
-INPUT_DIR=../bin/50x50x100/density/
-OUTPUT_DIR=../bin/50x50x100/density_out/
+INPUT_DIR=../bin/200x2x200/density/
+OUTPUT_DIR=../bin/200x2x200/density_out/
 
 mkdir $OUTPUT_DIR
 SUFFIX=.png
@@ -16,7 +16,7 @@ do
         out_file=$OUTPUT_DIR$filename$SUFFIX
         echo "$in_file"
         echo "$out_file"
-        python mkplot.py $in_file $out_file
+        python3 mkplot.py $in_file $out_file
 	count=`expr $count + 1`
 #    fi
 done

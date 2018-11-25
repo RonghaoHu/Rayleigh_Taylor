@@ -9,10 +9,16 @@
 #define Z_ion 1.0
 #define A_ion 2.0
 #define G     6.e13
-#define GAMMA 1.4
+#define GAMMA 1.666667
+#ifdef RTI2D
+  #define X 200
+  #define Y 2
+  #define Z 200
+#else
 #define X 50
 #define Y 50
 #define Z 100
+#endif
 #define XMIN -0.0001
 #define XMAX 0.0001
 #define YMIN -0.0001
@@ -222,7 +228,7 @@ void Ucalcinv(float *phys, float *U, int N) {     // phys[] = rho, v, p
 }
 
 
-__global__ void init_water_oil_3d(float *physical, int NCell)
+__global__ void init_conditions(float *physical, int NCell)
 {
   int i=0, j=0, k=0, N=0;
   float dx, dy, dz;
@@ -246,7 +252,11 @@ __global__ void init_water_oil_3d(float *physical, int NCell)
     physical[N+2] = 0.0;
     physical[N+3] = 0.0;
     physical[N+3] = 0.0;
+#ifdef RTI2D
+    c_pert = 1.0 - 0.05 * (1 + cos(2 * PI * (x) / (XMAX - XMIN))) * exp(-(z*z)/(scaleLen*scaleLen));
+#else
     c_pert = 1.0 - 0.05 * (1 + cos(2 * PI * (x) / (XMAX - XMIN))) * (1 + cos(2 * PI * (y) / (YMAX - YMIN))) * exp(-(z*z)/(scaleLen*scaleLen));
+#endif
     physical[N+4] = c_pert * (P0 - G * ((z) * (rhol + rhoh) / 2 + log(cosh((z)/scaleLen))*scaleLen*(rhoh - rhol) / 2));
     physical[N+5] = 0.0;
     physical[N+6] = 0.0;
@@ -1682,8 +1692,8 @@ int main()
     (NCell + threadsPerBlock - 1) / threadsPerBlock;
 
   
-  init_water_oil_3d<<<blocksPerGrid, threadsPerBlock>>>(d_phys, NCell);
-  Check_CUDA_Error("init_water_oil_3d");
+  init_conditions<<<blocksPerGrid, threadsPerBlock>>>(d_phys, NCell);
+  Check_CUDA_Error("init_conditions");
   h_Ucalc<<<blocksPerGrid, threadsPerBlock>>>(d_U, d_phys, NCell);
   cudaFree(d_phys);
 

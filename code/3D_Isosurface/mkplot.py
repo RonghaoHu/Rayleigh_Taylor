@@ -6,9 +6,9 @@ import sys
 Input= sys.argv[1]
 Output= sys.argv[2]
 
-nx = 100
-ny = 50
-nz = 50
+nx = 200
+ny = 2
+nz = 200
 
 data = loadtxt("%s"%Input)
 density = data[:,0].reshape([nx,ny,nz])
