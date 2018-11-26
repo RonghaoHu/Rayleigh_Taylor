@@ -16,7 +16,7 @@ do
         out_file=$OUTPUT_DIR$filename$SUFFIX
         echo "$in_file"
         echo "$out_file"
-        python mkplot.py $in_file $out_file
+        python3 mkplot.py $in_file $out_file
 	count=`expr $count + 1`
 #    fi
 done

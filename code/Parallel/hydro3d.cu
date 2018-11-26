@@ -11,9 +11,9 @@
 #define G     6.e13
 #define GAMMA 1.666667
 #ifdef RTI2D
-  #define X 200
+  #define X 1000
   #define Y 2
-  #define Z 200
+  #define Z 1000
 #else
 #define X 50
 #define Y 50
@@ -1715,9 +1715,9 @@ int main()
       cudaMemcpy(h_U, d_U, 8*(X)*(Y)*(Z)*sizeof(float), cudaMemcpyDeviceToHost);
       output_file3(h_U, t/1.e-9);
       //output_file2(h_U, t/1.e-9);
+      printf ("%d| t = %f\n",l,t/1.e-9);
       k++;
     }
-    printf ("%d| t = %f\n",l,t/1.e-9);
     l++;
   }
   //cudaMemcpy(h_U, d_U, 8*(X)*(Y)*(Z)*sizeof(float), cudaMemcpyDeviceToHost);
