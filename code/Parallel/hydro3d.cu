@@ -6,8 +6,8 @@
 #include<stdlib.h>
 #include "timing.h"
 #define PI    3.14159265
-#define Z_ion 1.0
-#define A_ion 2.0
+#define Zi    1.0
+#define Ai    2.0
 #define G     6.e13
 #define GAMMA 1.666667
 #ifdef RTI2D
