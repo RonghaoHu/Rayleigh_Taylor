@@ -372,13 +372,6 @@ void output_file(float *U, float t, int file_num){
 
     fclose(time_data);
     
-    sprintf(command, "cp density_%d_%d_%d_3d.dat %dx%dx%d/density/%f.dat",X,Y,Z,X,Y,Z,t);
-    system(command);
-    sprintf(command, "cp velocity_%d_%d_%d_3d.dat %dx%dx%d/velocity/%f.dat",X,Y,Z,X,Y,Z,t);
-    system(command);
-    sprintf(command, "cp pressure_%d_%d_%d_3d.dat %dx%dx%d/pressure/%f.dat",X,Y,Z,X,Y,Z,t);
-    system(command);
-
     free (phys);
 }
 
