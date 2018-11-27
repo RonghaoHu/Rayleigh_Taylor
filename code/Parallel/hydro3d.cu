@@ -4,7 +4,6 @@
 #include<math.h>
 #include<time.h>
 #include<stdlib.h>
-#include "timing.h"
 #define PI    3.14159265
 #define Zi    1.0
 #define Ai    2.0
@@ -337,63 +336,7 @@ void output_print(float *file,char *name, int element, int x, int y, int z, int 
   fclose(fp);
 }
   
-void output_file2(float *U,float t){
-
-  int i=0, j, k, N;
-  float xstep, ystep, zstep;
-  Grid  (&xstep, &ystep, &zstep);
-  int Sx = 8*Y*Z, Sy = 8*Z, Sz = 8;
-  
-  char command[160];
-  char name[160];
-  float *phys = (float*) malloc (8*X*Y*Z*sizeof(float));
-  Ucalcinv(phys, U, (X)*(Y)*(Z));
-
-  sprintf(command, "rm density_%d_%d_%d_2d.dat",X,Y,Z);
-  system(command);
-  sprintf(name,"density_%d_%d_%d_2d.dat",X,Y,Z);
-  FILE *dens = fopen(name, "a+");
-    
-  sprintf(command, "rm velocity_%d_%d_%d_2d.dat",X,Y,Z);
-  system(command);
-  sprintf(name, "velocity_%d_%d_%d_2d.dat",X,Y,Z);
-
-  FILE *vel = fopen(name,"a+");
-    
-  sprintf(command, "rm pressure_%d_%d_%d_2d.dat",X,Y,Z);
-  system(command);
-  sprintf(name, "pressure_%d_%d_%d_2d.dat",X,Y,Z);
-
-  FILE *press = fopen(name,"a+");
-  
-  for (k=0; k<Z; k++) {
-    for (i=0; i<X; i++) {
-      j = Y/2;
-      N = Sx*i+Sy*j+Sz*k;
-      fprintf(dens , "%f\t",phys[N]);
-      //fprintf(vel  , "%f\t",phys[N+3]);
-      fprintf(vel  , "%e\t",phys[N+6]);
-      fprintf(press, "%f\t",phys[N+4]);
-    }
-    fprintf(dens , "\n");
-    fprintf(vel  , "\n");
-    fprintf(press, "\n");
-  }
-  fclose(dens);
-  fclose(vel);
-  fclose(press);
-
-  sprintf(command, "cp density_%d_%d_%d_2d.dat %dx%d/density/%f.dat",X,Y,Z,X,Z,t);
-  system(command);
-  sprintf(command, "cp velocity_%d_%d_%d_2d.dat %dx%d/velocity/%f.dat",X,Y,Z,X,Z,t);
-  system(command);
-  sprintf(command, "cp pressure_%d_%d_%d_2d.dat %dx%d/pressure/%f.dat",X,Y,Z,X,Z,t);
-  system(command);
-
-  free (phys);
-}
-
-void output_file3(float *U, float t){
+void output_file(float *U, float t, int file_num){
     
     int i=0, j, k, l, N;
     float xstep, ystep, zstep;
@@ -405,41 +348,30 @@ void output_file3(float *U, float t){
     float *phys = (float*) malloc (8*X*Y*Z*sizeof(float));
     Ucalcinv(phys, U, (X)*(Y)*(Z));
     
-    sprintf(command, "rm density_%d_%d_%d_3d.dat",X,Y,Z);
-    system(command);
-    sprintf(name,"density_%d_%d_%d_3d.dat",X,Y,Z);
+    sprintf(name,"data/phys_data_%d.dat", file_num);
 
-    FILE *dens = fopen(name, "a+");
-    
-    sprintf(command, "rm velocity_%d_%d_%d_3d.dat",X,Y,Z);
-    system(command);
-    sprintf(name, "velocity_%d_%d_%d_3d.dat",X,Y,Z);
-
-    FILE *vel = fopen(name,"a+");
-    
-    sprintf(command, "rm pressure_%d_%d_%d_3d.dat",X,Y,Z);
-    system(command);
-    sprintf(name, "pressure_%d_%d_%d_3d.dat",X,Y,Z);
-
-    FILE *press = fopen(name,"a+");
+    FILE *phys_data = fopen(name, "a+");
     
     for (k=0; k<Z; k++) {
         for (i=0; i<X; i++) {
             for (j=0; j<Y; j++) {
                 for (l=0; l<8; l++) {
                     N = Sx*i+Sy*j+Sz*k+l;
-                    fprintf(dens , "%e\t",phys[N]);
-                    //fprintf(vel  , "%d\t%d\t%d\t%f\n",i,j,k,phys[N+3]);
-                    //fprintf(press, "%d\t%d\t%d\t%f\n",i,j,k,phys[N+4]);
+                    fprintf(phys_data, "%e\t",phys[N]);
                 }
                 fprintf(dens, "\n");
             }
         }
     }
-    fclose(dens);
-    fclose(vel);
-    fclose(press);
+    fclose(phys_data);
 
+    sprintf(name, "times.dat");
+
+    FILE *time_data = fopen(name,"a+");
+    fprintf(time_data, "%f\n", t);
+
+    fclose(time_data);
+    
     sprintf(command, "cp density_%d_%d_%d_3d.dat %dx%dx%d/density/%f.dat",X,Y,Z,X,Y,Z,t);
     system(command);
     sprintf(command, "cp velocity_%d_%d_%d_3d.dat %dx%dx%d/velocity/%f.dat",X,Y,Z,X,Y,Z,t);
@@ -451,26 +383,9 @@ void output_file3(float *U, float t){
 }
 
 
-void Creat_folder(){
+void Create_folder(){
   char command[120];
-  sprintf(command, "rm -r %dx%dx%d",X,Y,Z);
-  system(command);
-  sprintf(command, "mkdir %dx%dx%d",X,Y,Z);
-  system(command);
-  sprintf(command, "mkdir %dx%dx%d/velocity",X,Y,Z);
-  system(command);
-  sprintf(command, "mkdir %dx%dx%d/density",X,Y,Z);
-  system(command);
-  sprintf(command, "mkdir %dx%dx%d/pressure",X,Y,Z);
-  system(command);
-  sprintf(command, "rm -r %dx%d",X,Z);
-  sprintf(command, "mkdir %dx%d",X,Z);
-  system(command);
-  sprintf(command, "mkdir %dx%d/velocity",X,Z);
-  system(command);
-  sprintf(command, "mkdir %dx%d/density",X,Z);
-  system(command);
-  sprintf(command, "mkdir %dx%d/pressure",X,Z);
+  sprintf(command, "mkdir data");
   system(command);
 }
 
@@ -1316,7 +1231,7 @@ __global__ void h_Cal_temp(float *phys, float *temp, float dx, float dy, float d
   int i,j,k,N,Nf;
   int threadID = blockIdx.x * blockDim.x + threadIdx.x;
   int Sx = (Y)*(Z), Sy = (Z), Sz = 1;
-  float ee = 6.02e23 * 1.6e-19 * 1.e3;
+  float ee = 2 * 6.02e23 * 1.6e-19 * 1.e3 * Zi / Ai;
 
   if(threadID < NThreads){
     i = threadID/(Y)*(Z);
@@ -1409,16 +1324,7 @@ void h_Fluxsource( float *Source, float *U, float *dt)
   int blocksPerGrid = \
     ( (X)*(Y)*(Z) + threadsPerBlock - 1) / threadsPerBlock;
   h_Ucalcinv<<<blocksPerGrid, threadsPerBlock>>>(phys, U, (X)*(Y)*(Z));
-#if 0
-  float *Potential;
-  cudaMalloc(&Potential, (X+2)*(Y+2)*(Z+2)*sizeof(float));
-  Check_CUDA_Error("at Fluxsource: Malloc Potential");
-  blocksPerGrid = \
-    ((X+2)*(Y+2)*(Z+2) + threadsPerBlock - 1)/ threadsPerBlock;
-  h_Set_Potential<<<blocksPerGrid, threadsPerBlock>>>(Potential, dx, dy, dz, (X+2)*(Y+2)*(Z+2));
-  Check_CUDA_Error("at Fluxsource: Set_Potential");
-#endif 
-    
+
   blocksPerGrid = \
     ((X)*(Y)*(Z) + threadsPerBlock - 1) / threadsPerBlock; 
   h_Cal_temp<<<blocksPerGrid, threadsPerBlock>>>(phys, temp, dx, dy, dz, (X)*(Y)*(Z));
@@ -1676,7 +1582,7 @@ int main()
   float t = 0 ;
   int k=0,l=0;
   
-  Creat_folder();//Creat folder to store data;
+  Create_folder();//Creat folder to store data;
   /*****************/
   size = 8*(X)*(Y)*(Z)*sizeof(float);
   float *d_phys;
@@ -1699,31 +1605,18 @@ int main()
 
   
   /*****************Advance*************/
-#if 0
-  timestamp_type time1, time2;
-  get_timestamp(&time1);
-  Advance(d_U_adv, d_U, &dt);
-  get_timestamp(&time2);
-  printf("time for Advance: %f s\n", timestamp_diff_in_seconds(time1,time2));
-#endif 
-#if 1
   while(t < tmax){
     t+=dt;
     Advance(d_U_adv, d_U, &dt);
     cudaMemcpy(d_U, d_U_adv, 8*(X)*(Y)*(Z)*sizeof(float), cudaMemcpyDeviceToDevice);
     if( t/1.e-9 >0.5 * k){
       cudaMemcpy(h_U, d_U, 8*(X)*(Y)*(Z)*sizeof(float), cudaMemcpyDeviceToHost);
-      output_file3(h_U, t/1.e-9);
-      //output_file2(h_U, t/1.e-9);
+      output_file(h_U, t/1.e-9, k);
       printf ("%d| t = %f\n",l,t/1.e-9);
       k++;
     }
     l++;
   }
-  //cudaMemcpy(h_U, d_U, 8*(X)*(Y)*(Z)*sizeof(float), cudaMemcpyDeviceToHost);
-  //output_file3(h_U, t/1.e-9);
-  //output_file2(h_U, t/1.e-9);
-#endif
   cudaFree(d_U);
   cudaFree(d_U_adv);
   free(h_U);
