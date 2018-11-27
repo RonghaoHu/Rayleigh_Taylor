@@ -359,7 +359,7 @@ void output_file(float *U, float t, int file_num){
                     N = Sx*i+Sy*j+Sz*k+l;
                     fprintf(phys_data, "%e\t",phys[N]);
                 }
-                fprintf(dens, "\n");
+                fprintf(phys_data, "\n");
             }
         }
     }
