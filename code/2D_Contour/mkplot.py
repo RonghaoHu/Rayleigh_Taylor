@@ -9,13 +9,13 @@ ny = 2
 nz = 200
 
 data = loadtxt("%s"%Input)
-density = data[:,0].reshape([nx,ny,nz])
-bx = data[:,7].reshape([nx,ny,nz])
-by = data[:,5].reshape([nx,ny,nz])
-bz = data[:,6].reshape([nx,ny,nz])
+density = data[:,0].reshape([nz,nx,ny])
+bz = data[:,7].reshape([nz,nx,ny])
+bx = data[:,5].reshape([nz,nx,ny])
+by = data[:,6].reshape([nz,nx,ny])
 
 #title('lalal')
-contourf(density[:,0,:], 40, cmap='RdBu')
+contourf(density[:,:,0], 40, cmap='RdBu')
 colorbar()
 savefig("%s"%Output,dpi=800)
 

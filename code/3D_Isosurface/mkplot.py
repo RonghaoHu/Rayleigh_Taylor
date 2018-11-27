@@ -11,13 +11,10 @@ ny = 2
 nz = 200
 
 data = loadtxt("%s"%Input)
-density = data[:,0].reshape([nx,ny,nz])
-bx = data[:,7].reshape([nx,ny,nz])
-by = data[:,5].reshape([nx,ny,nz])
-bz = data[:,6].reshape([nx,ny,nz])
-#contourf(z[:,:,25], 40, cmap='RdBu')
-#colorbar()
-#show()
+density = data[:,0].reshape([nz,nx,ny])
+bz = data[:,7].reshape([nz,nx,ny])
+bx = data[:,5].reshape([nz,nx,ny])
+by = data[:,6].reshape([nz,nx,ny])
 #mlab.contour3d(zz, contours=3, transparent=True)
 mlab.pipeline.volume(mlab.pipeline.scalar_field(density),color=(1.,1.,1.))
 src = mlab.pipeline.vector_field(bx, by, bz)
