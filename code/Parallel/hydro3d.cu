@@ -1224,7 +1224,7 @@ __global__ void h_Cal_temp(float *phys, float *temp, float dx, float dy, float d
   int i,j,k,N,Nf;
   int threadID = blockIdx.x * blockDim.x + threadIdx.x;
   int Sx = (Y)*(Z), Sy = (Z), Sz = 1;
-  float ee = 2 * 6.02e23 * 1.6e-19 * 1.e3 * Zi / Ai;
+  float ee = (1.0 + Zi) * 6.02e23 * 1.6e-19 * 1.e3 / Ai;
 
   if(threadID < NThreads){
     i = threadID/(Y)*(Z);
