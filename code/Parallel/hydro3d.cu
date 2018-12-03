@@ -10,9 +10,9 @@
 #define G     6.e13
 #define GAMMA 1.666667
 #ifdef RTI2D
-  #define X 1000
+  #define X 200
   #define Y 2
-  #define Z 1000
+  #define Z 200
 #else
 #define X 50
 #define Y 50
@@ -31,6 +31,8 @@
 __constant__ float P0 = 1.2e16;
 __constant__ float rhol = 33.e3;
 __constant__ float rhoh = 66.e3;
+__constant__ float const1 = (1.0 + Zi) * 6.02e23 * 1.6e-19 * 1.e3 / Ai;
+__constant__ float const2 = 6.02e23 * 1.6e-19 * 4e-7 * PI * 1.e3 * Zi / Ai;
 
 
 void Grid(float *gridX, float *gridY, float *gridZ) {
@@ -1224,7 +1226,7 @@ __global__ void h_Cal_temp(float *phys, float *temp, float dx, float dy, float d
   int i,j,k,N,Nf;
   int threadID = blockIdx.x * blockDim.x + threadIdx.x;
   int Sx = (Y)*(Z), Sy = (Z), Sz = 1;
-  float ee = (1.0 + Zi) * 6.02e23 * 1.6e-19 * 1.e3 / Ai;
+  
 
   if(threadID < NThreads){
     i = threadID/(Y)*(Z);
@@ -1233,9 +1235,9 @@ __global__ void h_Cal_temp(float *phys, float *temp, float dx, float dy, float d
     N = i*Sx*3+j*Sy*3+k*3;
     Nf = i*Sx*8+j*Sy*8+k*8;
     if(k>0&&k<Z-1) {
-      temp[N]   = GradientX(phys, Nf, 8, 4, dx) / (phys[Nf]*ee);
-      temp[N+1] = GradientY(phys, Nf, 8, 4, dy) / (phys[Nf]*ee);
-      temp[N+2] = GradientZ(phys, Nf, 8, 4, dz) / (phys[Nf]*ee);
+      temp[N]   = GradientX(phys, Nf, 8, 4, dx) / (phys[Nf]*const1) - (phys[Nf+7] * (GradientZ(phys,Nf,8,5,dz) - GradientX(phys,Nf,8,7,dx)) - phys[Nf+6] * (GradientX(phys,Nf,8,6,dx)-GradientY(phys,Nf,8,5,dy))) / (phys[Nf]*const2);
+      temp[N+1] = GradientY(phys, Nf, 8, 4, dy) / (phys[Nf]*const1) - (phys[Nf+5] * (GradientX(phys,Nf,8,6,dx) - GradientY(phys,Nf,8,5,dy)) - phys[Nf+7] * (GradientY(phys,Nf,8,7,dy)-GradientZ(phys,Nf,8,6,dz))) / (phys[Nf]*const2);
+      temp[N+2] = GradientZ(phys, Nf, 8, 4, dz) / (phys[Nf]*const1) - (phys[Nf+7] * (GradientZ(phys,Nf,8,5,dz) - GradientX(phys,Nf,8,7,dx)) - phys[Nf+6] * (GradientX(phys,Nf,8,6,dx)-GradientY(phys,Nf,8,5,dy))) / (phys[Nf]*const2);
     }
     else {
       temp[N] = 0.0;
