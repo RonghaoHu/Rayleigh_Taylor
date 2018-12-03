@@ -31,9 +31,9 @@
 __constant__ float P0 = 1.2e16;
 __constant__ float rhol = 33.e3;
 __constant__ float rhoh = 66.e3;
-__constant__ float mu = 4e-7 * PI;
-__constant__ float const1 = (1.0 + Zi) * 6.02e23 * 1.6e-19 * 1.e3 / Ai;
-__constant__ float const2 = 6.02e23 * 1.6e-19 * mu * 1.e3 * Zi / Ai;
+float mu = 4e-7 * PI;
+float const1 = (1.0 + Zi) * 6.02e23 * 1.6e-19 * 1.e3 / Ai;
+float const2 = 6.02e23 * 1.6e-19 * mu * 1.e3 * Zi / Ai;
 
 
 void Grid(float *gridX, float *gridY, float *gridZ) {
