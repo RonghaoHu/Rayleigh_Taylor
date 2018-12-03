@@ -14,9 +14,9 @@
   #define Y 2
   #define Z 200
 #else
-#define X 50
-#define Y 50
-#define Z 100
+  #define X 50
+  #define Y 50
+  #define Z 100
 #endif
 #define XMIN -0.0001
 #define XMAX 0.0001
@@ -31,8 +31,9 @@
 __constant__ float P0 = 1.2e16;
 __constant__ float rhol = 33.e3;
 __constant__ float rhoh = 66.e3;
+__constant__ float mu = 4e-7 * PI;
 __constant__ float const1 = (1.0 + Zi) * 6.02e23 * 1.6e-19 * 1.e3 / Ai;
-__constant__ float const2 = 6.02e23 * 1.6e-19 * 4e-7 * PI * 1.e3 * Zi / Ai;
+__constant__ float const2 = 6.02e23 * 1.6e-19 * mu * 1.e3 * Zi / Ai;
 
 
 void Grid(float *gridX, float *gridY, float *gridZ) {
@@ -110,32 +111,6 @@ __global__ void h_Ucalcinv(float *phys, float *U, int NThreads) {     // phys[] 
   }
 }
 
-__global__ void h_FluxCalcPX(float *FLX, float *physL, float *FRX, float *physR, int NThreads)
-{
-  int i = blockDim.x * blockIdx.x + threadIdx.x;
-  int l;
-  __shared__ float d_physL[BLOCK_SIZE*8];
-  __shared__ float d_physR[BLOCK_SIZE*8];
-  
-  if(i < NThreads){
-    for(l = 0; l < 8; l++) d_physL[8*threadIdx.x+l] = physL[8*i+l];
-    for(l = 0; l < 8; l++) d_physR[8*threadIdx.x+l] = physR[8*i+l];
-    
-    FLX[8*i+0] = d_physL[8*threadIdx.x+0] * d_physL[8*threadIdx.x+1];
-    FLX[8*i+1] = d_physL[8*threadIdx.x+0] * d_physL[8*threadIdx.x+1] * d_physL[8*threadIdx.x+1] + d_physL[8*threadIdx.x+4];
-    FLX[8*i+2] = d_physL[8*threadIdx.x+0] * d_physL[8*threadIdx.x+1] * d_physL[8*threadIdx.x+2];
-    FLX[8*i+3] = d_physL[8*threadIdx.x+0] * d_physL[8*threadIdx.x+1] * d_physL[8*threadIdx.x+3];
-    FLX[8*i+4] = d_physL[8*threadIdx.x+1] *(d_physL[8*threadIdx.x+0] *(d_physL[8*threadIdx.x+1] * d_physL[8*threadIdx.x+1] + d_physL[8*threadIdx.x+2] * d_physL[8*threadIdx.x+2] + d_physL[8*threadIdx.x+3] * d_physL[8*threadIdx.x+3]) * .5 + d_physL[8*threadIdx.x+4] * GAMMA / (GAMMA - 1));
-
-    FRX[8*i+0] = d_physR[8*threadIdx.x+0] * d_physR[8*threadIdx.x+1];
-    FRX[8*i+1] = d_physR[8*threadIdx.x+0] * d_physR[8*threadIdx.x+1] * d_physR[8*threadIdx.x+1] + d_physR[8*threadIdx.x+4];
-    FRX[8*i+2] = d_physR[8*threadIdx.x+0] * d_physR[8*threadIdx.x+1] * d_physR[8*threadIdx.x+2];
-    FRX[8*i+3] = d_physR[8*threadIdx.x+0] * d_physR[8*threadIdx.x+1] * d_physR[8*threadIdx.x+3];
-    FRX[8*i+4] = d_physR[8*threadIdx.x+1] *(d_physR[8*threadIdx.x+0] *(d_physR[8*threadIdx.x+1] * d_physR[8*threadIdx.x+1] + d_physR[8*threadIdx.x+2] * d_physR[8*threadIdx.x+2] + d_physR[8*threadIdx.x+3] * d_physR[8*threadIdx.x+3]) * .5 + d_physR[8*threadIdx.x+4] * GAMMA / (GAMMA - 1));
-  }
-}
-
-
 __global__ void h_FluxCalcPX_N(float *FL, float *phys, int NThreads)
 {
   int i = blockDim.x * blockIdx.x + threadIdx.x;
@@ -146,10 +121,17 @@ __global__ void h_FluxCalcPX_N(float *FL, float *phys, int NThreads)
     for(l = 0; l < 8; l++) d_phys[8*threadIdx.x+l] = phys[8*i+l];
     
     FL[8*i+0] = d_phys[8*threadIdx.x+0] * d_phys[8*threadIdx.x+1];
+#ifdef MHD
+    FL[8*i+1] = d_phys[8*threadIdx.x+0] * d_phys[8*threadIdx.x+1] * d_phys[8*threadIdx.x+1] + d_phys[8*threadIdx.x+4] + (d_phys[8*threadIdx.x+5]*d_phys[8*threadIdx.x+5]+d_phys[8*threadIdx.x+6]*d_phys[8*threadIdx.x+6]+d_phys[8*threadIdx.x+7]*d_phys[8*threadIdx.x+7])/(2*mu)-d_phys[8*threadIdx.x+5]*d_phys[8*threadIdx.x+5]/mu;
+    FL[8*i+2] = d_phys[8*threadIdx.x+0] * d_phys[8*threadIdx.x+1] * d_phys[8*threadIdx.x+2] - d_phys[8*threadIdx.x+5] * d_phys[8*threadIdx.x+6] / mu;
+    FL[8*i+3] = d_phys[8*threadIdx.x+0] * d_phys[8*threadIdx.x+1] * d_phys[8*threadIdx.x+3] - d_phys[8*threadIdx.x+5] * d_phys[8*threadIdx.x+7] / mu;
+    FL[8*i+4] = d_phys[8*threadIdx.x+1] *(d_phys[8*threadIdx.x+0] *(d_phys[8*threadIdx.x+1] * d_phys[8*threadIdx.x+1] + d_phys[8*threadIdx.x+2] * d_phys[8*threadIdx.x+2] + d_phys[8*threadIdx.x+3] * d_phys[8*threadIdx.x+3]) * .5 + d_phys[8*threadIdx.x+4] * GAMMA / (GAMMA - 1)+(d_phys[8*threadIdx.x+5]*d_phys[8*threadIdx.x+5]+d_phys[8*threadIdx.x+6]*d_phys[8*threadIdx.x+6]+d_phys[8*threadIdx.x+7]*d_phys[8*threadIdx.x+7])/(2*mu)) - d_phys[8*threadIdx.x+5]*(d_phys[8*threadIdx.x+1]*d_phys[8*threadIdx.x+5]+d_phys[8*threadIdx.x+2]*d_phys[8*threadIdx.x+6]+d_phys[8*threadIdx.x+3]*d_phys[8*threadIdx.x+7])/mu;
+#else
     FL[8*i+1] = d_phys[8*threadIdx.x+0] * d_phys[8*threadIdx.x+1] * d_phys[8*threadIdx.x+1] + d_phys[8*threadIdx.x+4];
     FL[8*i+2] = d_phys[8*threadIdx.x+0] * d_phys[8*threadIdx.x+1] * d_phys[8*threadIdx.x+2];
     FL[8*i+3] = d_phys[8*threadIdx.x+0] * d_phys[8*threadIdx.x+1] * d_phys[8*threadIdx.x+3];
     FL[8*i+4] = d_phys[8*threadIdx.x+1] *(d_phys[8*threadIdx.x+0] *(d_phys[8*threadIdx.x+1] * d_phys[8*threadIdx.x+1] + d_phys[8*threadIdx.x+2] * d_phys[8*threadIdx.x+2] + d_phys[8*threadIdx.x+3] * d_phys[8*threadIdx.x+3]) * .5 + d_phys[8*threadIdx.x+4] * GAMMA / (GAMMA - 1));
+#endif
     FL[8*i+5] = 0.0;
     FL[8*i+6] = d_phys[8*threadIdx.x+1]*d_phys[8*threadIdx.x+6]-d_phys[8*threadIdx.x+2]*d_phys[8*threadIdx.x+5];
     FL[8*i+7] = d_phys[8*threadIdx.x+1]*d_phys[8*threadIdx.x+7]-d_phys[8*threadIdx.x+3]*d_phys[8*threadIdx.x+5];
@@ -168,10 +150,17 @@ __global__ void h_FluxCalcPY_N(float *FL, float *phys, int NThreads)
     for(l = 0; l < 8; l++) d_phys[8*threadIdx.x+l] = phys[8*i+l];
 
     FL[8*i+0] = d_phys[8*threadIdx.x+0] * d_phys[8*threadIdx.x+2];
+#ifdef MHD
+    FL[8*i+1] = d_phys[8*threadIdx.x+0] * d_phys[8*threadIdx.x+2] * d_phys[8*threadIdx.x+1] - d_phys[8*threadIdx.x+6] * d_phys[8*threadIdx.x+5] / mu;
+    FL[8*i+2] = d_phys[8*threadIdx.x+0] * d_phys[8*threadIdx.x+2] * d_phys[8*threadIdx.x+2] + d_phys[8*threadIdx.x+4] + (d_phys[8*threadIdx.x+5]*d_phys[8*threadIdx.x+5]+d_phys[8*threadIdx.x+6]*d_phys[8*threadIdx.x+6]+d_phys[8*threadIdx.x+7]*d_phys[8*threadIdx.x+7])/(2*mu)-d_phys[8*threadIdx.x+6]*d_phys[8*threadIdx.x+6]/mu;
+    FL[8*i+3] = d_phys[8*threadIdx.x+0] * d_phys[8*threadIdx.x+2] * d_phys[8*threadIdx.x+3] - d_phys[8*threadIdx.x+6] * d_phys[8*threadIdx.x+7] / mu;
+    FL[8*i+4] = d_phys[8*threadIdx.x+2] *(d_phys[8*threadIdx.x+0] *(d_phys[8*threadIdx.x+1] * d_phys[8*threadIdx.x+1] + d_phys[8*threadIdx.x+2] * d_phys[8*threadIdx.x+2] + d_phys[8*threadIdx.x+3] * d_phys[8*threadIdx.x+3]) * .5 + d_phys[8*threadIdx.x+4] * GAMMA / (GAMMA - 1)+(d_phys[8*threadIdx.x+5]*d_phys[8*threadIdx.x+5]+d_phys[8*threadIdx.x+6]*d_phys[8*threadIdx.x+6]+d_phys[8*threadIdx.x+7]*d_phys[8*threadIdx.x+7])/(2*mu)) - d_phys[8*threadIdx.x+6]*(d_phys[8*threadIdx.x+1]*d_phys[8*threadIdx.x+5]+d_phys[8*threadIdx.x+2]*d_phys[8*threadIdx.x+6]+d_phys[8*threadIdx.x+3]*d_phys[8*threadIdx.x+7])/mu;
+#else
     FL[8*i+1] = d_phys[8*threadIdx.x+0] * d_phys[8*threadIdx.x+2] * d_phys[8*threadIdx.x+1];
     FL[8*i+2] = d_phys[8*threadIdx.x+0] * d_phys[8*threadIdx.x+2] * d_phys[8*threadIdx.x+2] + d_phys[8*threadIdx.x+4];
     FL[8*i+3] = d_phys[8*threadIdx.x+0] * d_phys[8*threadIdx.x+2] * d_phys[8*threadIdx.x+3];
     FL[8*i+4] = d_phys[8*threadIdx.x+2] *(d_phys[8*threadIdx.x+0] *(d_phys[8*threadIdx.x+1] * d_phys[8*threadIdx.x+1] + d_phys[8*threadIdx.x+2] * d_phys[8*threadIdx.x+2] + d_phys[8*threadIdx.x+3] * d_phys[8*threadIdx.x+3]) * .5 + d_phys[8*threadIdx.x+4] * GAMMA / (GAMMA - 1));
+#endif
     FL[8*i+5] = d_phys[8*threadIdx.x+2]*d_phys[8*threadIdx.x+5]-d_phys[8*threadIdx.x+1]*d_phys[8*threadIdx.x+6];
     FL[8*i+6] = 0.0;
     FL[8*i+7] = d_phys[8*threadIdx.x+2]*d_phys[8*threadIdx.x+7]-d_phys[8*threadIdx.x+3]*d_phys[8*threadIdx.x+6];
@@ -188,10 +177,17 @@ __global__ void h_FluxCalcPZ_N(float *FL, float *phys, int NThreads)
   if(i < NThreads){
     for(l = 0; l < 8; l++) d_phys[8*threadIdx.x+l] = phys[8*i+l];
     FL[8*i+0] = d_phys[8*threadIdx.x+0] * d_phys[8*threadIdx.x+3];
+#ifdef MHD
+    FL[8*i+1] = d_phys[8*threadIdx.x+0] * d_phys[8*threadIdx.x+3] * d_phys[8*threadIdx.x+1] - d_phys[8*threadIdx.x+7] * d_phys[8*threadIdx.x+5] / mu;
+    FL[8*i+2] = d_phys[8*threadIdx.x+0] * d_phys[8*threadIdx.x+3] * d_phys[8*threadIdx.x+2] - d_phys[8*threadIdx.x+7] * d_phys[8*threadIdx.x+6] / mu;
+    FL[8*i+3] = d_phys[8*threadIdx.x+0] * d_phys[8*threadIdx.x+3] * d_phys[8*threadIdx.x+3] + d_phys[8*threadIdx.x+4] + (d_phys[8*threadIdx.x+5]*d_phys[8*threadIdx.x+5]+d_phys[8*threadIdx.x+6]*d_phys[8*threadIdx.x+6]+d_phys[8*threadIdx.x+7]*d_phys[8*threadIdx.x+7])/(2*mu)-d_phys[8*threadIdx.x+7]*d_phys[8*threadIdx.x+7]/mu;
+    FL[8*i+4] = d_phys[8*threadIdx.x+3] *(d_phys[8*threadIdx.x+0] *(d_phys[8*threadIdx.x+1] * d_phys[8*threadIdx.x+1] + d_phys[8*threadIdx.x+2] * d_phys[8*threadIdx.x+2] + d_phys[8*threadIdx.x+3] * d_phys[8*threadIdx.x+3]) * .5 + d_phys[8*threadIdx.x+4] * GAMMA / (GAMMA - 1)+(d_phys[8*threadIdx.x+5]*d_phys[8*threadIdx.x+5]+d_phys[8*threadIdx.x+6]*d_phys[8*threadIdx.x+6]+d_phys[8*threadIdx.x+7]*d_phys[8*threadIdx.x+7])/(2*mu)) - d_phys[8*threadIdx.x+7]*(d_phys[8*threadIdx.x+1]*d_phys[8*threadIdx.x+5]+d_phys[8*threadIdx.x+2]*d_phys[8*threadIdx.x+6]+d_phys[8*threadIdx.x+3]*d_phys[8*threadIdx.x+7])/mu;
+#else
     FL[8*i+1] = d_phys[8*threadIdx.x+0] * d_phys[8*threadIdx.x+3] * d_phys[8*threadIdx.x+1];
     FL[8*i+2] = d_phys[8*threadIdx.x+0] * d_phys[8*threadIdx.x+3] * d_phys[8*threadIdx.x+2];
     FL[8*i+3] = d_phys[8*threadIdx.x+0] * d_phys[8*threadIdx.x+3] * d_phys[8*threadIdx.x+3] + d_phys[8*threadIdx.x+4];
     FL[8*i+4] = d_phys[8*threadIdx.x+3] *(d_phys[8*threadIdx.x+0] *(d_phys[8*threadIdx.x+1] * d_phys[8*threadIdx.x+1] + d_phys[8*threadIdx.x+2] * d_phys[8*threadIdx.x+2] + d_phys[8*threadIdx.x+3] * d_phys[8*threadIdx.x+3]) * .5 + d_phys[8*threadIdx.x+4] * GAMMA / (GAMMA - 1));
+#endif
     FL[8*i+5] = d_phys[8*threadIdx.x+3]*d_phys[8*threadIdx.x+5]-d_phys[8*threadIdx.x+1]*d_phys[8*threadIdx.x+7];
     FL[8*i+6] = d_phys[8*threadIdx.x+3]*d_phys[8*threadIdx.x+6]-d_phys[8*threadIdx.x+2]*d_phys[8*threadIdx.x+7];
     FL[8*i+7] = 0.0;
