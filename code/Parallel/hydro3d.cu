@@ -31,9 +31,7 @@
 __constant__ float P0 = 1.2e16;
 __constant__ float rhol = 33.e3;
 __constant__ float rhoh = 66.e3;
-float mu = 4e-7 * PI;
-float const1 = (1.0 + Zi) * 6.02e23 * 1.6e-19 * 1.e3 / Ai;
-float const2 = 6.02e23 * 1.6e-19 * mu * 1.e3 * Zi / Ai;
+__constant__ float mu = 1.2566370614359173e-06;  // vacuum permeability
 
 
 void Grid(float *gridX, float *gridY, float *gridZ) {
@@ -1222,7 +1220,8 @@ __global__ void h_Cal_temp(float *phys, float *temp, float dx, float dy, float d
   int i,j,k,N,Nf;
   int threadID = blockIdx.x * blockDim.x + threadIdx.x;
   int Sx = (Y)*(Z), Sy = (Z), Sz = 1;
-  
+  float const1 = (1.0 + Zi) * 6.02e23 * 1.6e-19 * 1.e3 / Ai;
+  float const2 = 6.02e23 * 1.6e-19 * mu * 1.e3 * Zi / Ai;
 
   if(threadID < NThreads){
     i = threadID/(Y)*(Z);
