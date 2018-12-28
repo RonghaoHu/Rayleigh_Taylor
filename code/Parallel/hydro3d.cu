@@ -85,7 +85,12 @@ __global__ void h_Ucalc(float *U, float *phys, int NThreads) {
     U[8*i+1] = local_phys[8*threadIdx.x+0] * local_phys[8*threadIdx.x+1];
     U[8*i+2] = local_phys[8*threadIdx.x+0] * local_phys[8*threadIdx.x+2];
     U[8*i+3] = local_phys[8*threadIdx.x+0] * local_phys[8*threadIdx.x+3];
+#ifdef MHD
+    U[8*i+4] = local_phys[8*threadIdx.x+4] / (GAMMA - 1) + 0.5 * local_phys[8*threadIdx.x+0] * (local_phys[8*threadIdx.x+1] * local_phys[8*threadIdx.x+1] + local_phys[8*threadIdx.x+2] * local_phys[8*threadIdx.x+2] + local_phys[8*threadIdx.x+3] * local_phys[8*threadIdx.x+3]) + 
+               (local_phys[8*threadIdx.x+5]*local_phys[8*threadIdx.x+5]+local_phys[8*threadIdx.x+6]*local_phys[8*threadIdx.x+6]+local_phys[8*threadIdx.x+7]*local_phys[8*threadIdx.x+7])/(2*mu);
+#else
     U[8*i+4] = local_phys[8*threadIdx.x+4] / (GAMMA - 1) + 0.5 * local_phys[8*threadIdx.x+0] * (local_phys[8*threadIdx.x+1] * local_phys[8*threadIdx.x+1] + local_phys[8*threadIdx.x+2] * local_phys[8*threadIdx.x+2] + local_phys[8*threadIdx.x+3] * local_phys[8*threadIdx.x+3]);
+#endif    
     U[8*i+5] = local_phys[8*threadIdx.x+5];
     U[8*i+6] = local_phys[8*threadIdx.x+6];
     U[8*i+7] = local_phys[8*threadIdx.x+7];
@@ -102,7 +107,12 @@ __global__ void h_Ucalcinv(float *phys, float *U, int NThreads) {     // phys[] 
     phys[8*i+1] = local_U[8*threadIdx.x+1] / local_U[8*threadIdx.x+0];
     phys[8*i+2] = local_U[8*threadIdx.x+2] / local_U[8*threadIdx.x+0];
     phys[8*i+3] = local_U[8*threadIdx.x+3] / local_U[8*threadIdx.x+0];
+#ifdef MHD
+    phys[8*i+4] = (local_U[8*threadIdx.x+4] - 0.5 * (local_U[8*threadIdx.x+1] * local_U[8*threadIdx.x+1] + local_U[8*threadIdx.x+2] * local_U[8*threadIdx.x+2] + local_U[8*threadIdx.x+3] * local_U[8*threadIdx.x+3])/ local_U[8*threadIdx.x+0] -
+                   (local_U[8*threadIdx.x+5]*local_U[8*threadIdx.x+5]+local_U[8*threadIdx.x+6]*local_U[8*threadIdx.x+6]+local_U[8*threadIdx.x+7]*local_U[8*threadIdx.x+7])/(2*mu)) * (GAMMA - 1);
+#else
     phys[8*i+4] = (local_U[8*threadIdx.x+4] - 0.5 * (local_U[8*threadIdx.x+1] * local_U[8*threadIdx.x+1] + local_U[8*threadIdx.x+2] * local_U[8*threadIdx.x+2] + local_U[8*threadIdx.x+3] * local_U[8*threadIdx.x+3])/ local_U[8*threadIdx.x+0]) * (GAMMA - 1);
+#endif
     phys[8*i+5] = local_U[8*threadIdx.x+5];
     phys[8*i+6] = local_U[8*threadIdx.x+6];
     phys[8*i+7] = local_U[8*threadIdx.x+7];
@@ -200,7 +210,12 @@ void Ucalc(float *U, float *phys, int N) {     // phys[] = rho, vx, vy, vz, p
     U[8*i+1] = phys[8*i+0] * phys[8*i+1];
     U[8*i+2] = phys[8*i+0] * phys[8*i+2];
     U[8*i+3] = phys[8*i+0] * phys[8*i+3];
+#ifdef MHD
+    U[8*i+4] = phys[8*i+4] / (GAMMA - 1) + 0.5 * phys[8*i+0] * (phys[8*i+1] * phys[8*i+1] + phys[8*i+2] * phys[8*i+2] + phys[8*i+3] * phys[8*i+3]) +
+               (phys[8*i+5]*phys[8*i+5]+phys[8*i+6]*phys[8*i+6]+phys[8*i+7]*phys[8*i+7])/(2*mu);
+#else
     U[8*i+4] = phys[8*i+4] / (GAMMA - 1) + 0.5 * phys[8*i+0] * (phys[8*i+1] * phys[8*i+1] + phys[8*i+2] * phys[8*i+2] + phys[8*i+3] * phys[8*i+3]);
+#endif    
     U[8*i+5] = phys[8*i+5];
     U[8*i+6] = phys[8*i+6];
     U[8*i+7] = phys[8*i+7];
@@ -215,7 +230,12 @@ void Ucalcinv(float *phys, float *U, int N) {     // phys[] = rho, v, p
     phys[8*i+1] = U[8*i+1] / U[8*i+0];
     phys[8*i+2] = U[8*i+2] / U[8*i+0];
     phys[8*i+3] = U[8*i+3] / U[8*i+0];
+#ifdef MHD
+    phys[8*i+4] = (U[8*i+4] - 0.5 * (U[8*i+1] * U[8*i+1] + U[8*i+2] * U[8*i+2] + U[8*i+3] * U[8*i+3])/ U[8*i+0] - 
+                   (U[8*i+5]*U[8*i+5]+U[8*i+6]*U[8*i+6]+U[8*i+7]*U[8*i+7])/(2*mu)) * (GAMMA - 1);
+#else
     phys[8*i+4] = (U[8*i+4] - 0.5 * (U[8*i+1] * U[8*i+1] + U[8*i+2] * U[8*i+2] + U[8*i+3] * U[8*i+3])/ U[8*i+0]) * (GAMMA - 1);
+#endif
     phys[8*i+5] = U[8*i+5];
     phys[8*i+6] = U[8*i+6];
     phys[8*i+7] = U[8*i+7];
