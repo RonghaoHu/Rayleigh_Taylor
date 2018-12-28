@@ -205,6 +205,7 @@ __global__ void h_FluxCalcPZ_N(float *FL, float *phys, int NThreads)
 
 void Ucalc(float *U, float *phys, int N) {     // phys[] = rho, vx, vy, vz, p
   int i=0;
+  float mu0 = 1.2566370614359173e-06;
   for (i=0;i<N;i++) {
     U[8*i+0] = phys[8*i+0];
     U[8*i+1] = phys[8*i+0] * phys[8*i+1];
@@ -212,7 +213,7 @@ void Ucalc(float *U, float *phys, int N) {     // phys[] = rho, vx, vy, vz, p
     U[8*i+3] = phys[8*i+0] * phys[8*i+3];
 #ifdef MHD
     U[8*i+4] = phys[8*i+4] / (GAMMA - 1) + 0.5 * phys[8*i+0] * (phys[8*i+1] * phys[8*i+1] + phys[8*i+2] * phys[8*i+2] + phys[8*i+3] * phys[8*i+3]) +
-               (phys[8*i+5]*phys[8*i+5]+phys[8*i+6]*phys[8*i+6]+phys[8*i+7]*phys[8*i+7])/(2*mu);
+               (phys[8*i+5]*phys[8*i+5]+phys[8*i+6]*phys[8*i+6]+phys[8*i+7]*phys[8*i+7])/(2*mu0);
 #else
     U[8*i+4] = phys[8*i+4] / (GAMMA - 1) + 0.5 * phys[8*i+0] * (phys[8*i+1] * phys[8*i+1] + phys[8*i+2] * phys[8*i+2] + phys[8*i+3] * phys[8*i+3]);
 #endif    
@@ -225,6 +226,7 @@ void Ucalc(float *U, float *phys, int N) {     // phys[] = rho, vx, vy, vz, p
 
 void Ucalcinv(float *phys, float *U, int N) {     // phys[] = rho, v, p
   int i=0;
+  float mu0 = 1.2566370614359173e-06;
   for (i=0;i<N;i++) {
     phys[8*i+0] = U[8*i+0];
     phys[8*i+1] = U[8*i+1] / U[8*i+0];
@@ -232,7 +234,7 @@ void Ucalcinv(float *phys, float *U, int N) {     // phys[] = rho, v, p
     phys[8*i+3] = U[8*i+3] / U[8*i+0];
 #ifdef MHD
     phys[8*i+4] = (U[8*i+4] - 0.5 * (U[8*i+1] * U[8*i+1] + U[8*i+2] * U[8*i+2] + U[8*i+3] * U[8*i+3])/ U[8*i+0] - 
-                   (U[8*i+5]*U[8*i+5]+U[8*i+6]*U[8*i+6]+U[8*i+7]*U[8*i+7])/(2*mu)) * (GAMMA - 1);
+                   (U[8*i+5]*U[8*i+5]+U[8*i+6]*U[8*i+6]+U[8*i+7]*U[8*i+7])/(2*mu0)) * (GAMMA - 1);
 #else
     phys[8*i+4] = (U[8*i+4] - 0.5 * (U[8*i+1] * U[8*i+1] + U[8*i+2] * U[8*i+2] + U[8*i+3] * U[8*i+3])/ U[8*i+0]) * (GAMMA - 1);
 #endif
