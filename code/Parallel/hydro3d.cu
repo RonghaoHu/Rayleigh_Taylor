@@ -5,12 +5,12 @@
 #include<time.h>
 #include<stdlib.h>
 #define PI    3.14159265
-#define Zi    1.0
-#define Ai    2.0
-#define G     6.e13
-#define GAMMA 1.666667
+#define Zi    1.0         // charge
+#define Ai    2.0         // atomic mass
+#define G     6.e13       // gravity m/s^2
+#define GAMMA 1.666667    // adiabatic index
 #ifdef RTI2D
-  #define X 200
+  #define X 200           // cell number in x,y,z directions
   #define Y 2
   #define Z 200
 #else
@@ -18,19 +18,19 @@
   #define Y 50
   #define Z 100
 #endif
-#define XMIN -0.0001
-#define XMAX 0.0001
+#define XMIN -0.0001     // boundary coordinates in meters
+#define XMAX 0.0001      
 #define YMIN -0.0001
 #define YMAX 0.0001
 #define ZMIN -0.0006
 #define ZMAX 0.0006
-#define THETA 2.0
-#define tmax 15.e-9
+#define THETA 2.0        // for high-order schemes
+#define tmax 15.e-9      // simulation time
 
 #define BLOCK_SIZE 256
-__constant__ float P0 = 1.2e16;
-__constant__ float rhol = 33.e3;
-__constant__ float rhoh = 66.e3;
+__constant__ float P0 = 1.2e16;      // pressure at center plane 
+__constant__ float rhol = 33.e3;     // low density
+__constant__ float rhoh = 66.e3;     // high density
 __constant__ float mu = 1.2566370614359173e-06;  // vacuum permeability
 
 
@@ -276,7 +276,7 @@ __global__ void init_conditions(float *physical, int NCell)
 #endif
     physical[N+4] = c_pert * (P0 - G * ((z) * (rhol + rhoh) / 2 + log(cosh((z)/scaleLen))*scaleLen*(rhoh - rhol) / 2));
     physical[N+5] = 0.0;
-    physical[N+6] = 0.0;
+    physical[N+6] = 1.e4;
     physical[N+7] = 0.0;
     //if (z < 0.0) {
     //  physical[N+0] = rhol;
