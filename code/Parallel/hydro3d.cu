@@ -1301,7 +1301,11 @@ __global__ void h_Cal_Source(float *Source, float *phys, float *temp2, float Gri
     k = threadID - (threadID/(Z))*(Z);
     gx = 0;//(Potential[N + Sx2] - Potential[N - Sx2]) * GridRatioX / 2;
     gy = 0;//(Potential[N + Sy2] - Potential[N - Sy2]) * GridRatioY / 2;
-    gz = G * dt;//(Potential[N + Sz2] - Potential[N - Sz2]) * GridRatioZ / 2;
+    if (k > 0 && k < Z - 1) {
+      gz = G * dt;
+    } else {
+      gz = 0.0;
+    }
     Nf = 8*(i*Sx + j*Sy + k*Sz);
     N = 3*(i*Sx + j*Sy + k*Sz);
     Source[Nf+0] = 0.;
