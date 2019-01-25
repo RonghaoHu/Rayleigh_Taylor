@@ -489,6 +489,9 @@ __global__ void h_BoundaryZ(float * phys_temp, float * phys, int NThreads)
   int Sx = 8*Y*Z, Sy = 8*Z, Sz = 8;
   int Sx2 = 8*Y*(Z+4), Sy2 = 8*(Z+4), Sz2 = 8;
   int i, j, k, l, N;
+  float dx, dy, dz;
+
+  d_Grid(&dx, &dy, &dz);
 
   if(threadID < NThreads){
     i = threadID/((Y)*(Z+4));
@@ -497,20 +500,24 @@ __global__ void h_BoundaryZ(float * phys_temp, float * phys, int NThreads)
 
     for ( l=0; l<8; l++){
       N = Sx2*i + Sy2*j + Sz2*k + l;
-      if      (k==0) {
-	    if    (l==3)  phys_temp[N] = -phys[Sx*i+Sy*j+Sz*(1)+l];
+      if (k==0) {
+        if (l==3) phys_temp[N] = 0.0;
+        else if (l==4) phys_temp[N] = phys[Sx*i+Sy*j+Sz*(0)+l]+G*phys[Sx*i+Sy*j+Sz*(0)]*dz*2;
         else          phys_temp[N] = phys[Sx*i+Sy*j+Sz*(0)+l];
       }
       else if (k==1) {
         if    (l==3)  phys_temp[N] = -phys[Sx*i+Sy*j+Sz*(0)+l];
+        else if (l==4) phys_temp[N] = phys[Sx*i+Sy*j+Sz*(0)+l]+G*phys[Sx*i+Sy*j+Sz*(0)]*dz;
         else          phys_temp[N] = phys[Sx*i+Sy*j+Sz*(0)+l];
       }
       else if (k==Z+2) {
         if    (l==3)  phys_temp[N] = -phys[Sx*i+Sy*j+Sz*(Z-1)+l];
+        else if (l==4) phys_temp[N] = phys[Sx*i+Sy*j+Sz*(Z-1)+l]-G*phys[Sx*i+Sy*j+Sz*(Z-1)]*dz;
         else          phys_temp[N] = phys[Sx*i+Sy*j+Sz*(Z-1)+l];
       }
       else if (k==Z+3) {
-        if    (l==3) phys_temp[N] = -phys[Sx*i+Sy*j+Sz*(Z-2)+l];
+        if    (l==3) phys_temp[N] = 0.0;
+        else if (l==4) phys_temp[N] = phys[Sx*i+Sy*j+Sz*(Z-1)+l]-G*phys[Sx*i+Sy*j+Sz*(Z-1)]*dz*2;
         else         phys_temp[N] = phys[Sx*i+Sy*j+Sz*(Z-1)+l];
       }
       else            phys_temp[N] = phys[Sx*i+Sy*j+Sz*(k-2)+l];
@@ -1301,11 +1308,8 @@ __global__ void h_Cal_Source(float *Source, float *phys, float *temp2, float Gri
     k = threadID - (threadID/(Z))*(Z);
     gx = 0;//(Potential[N + Sx2] - Potential[N - Sx2]) * GridRatioX / 2;
     gy = 0;//(Potential[N + Sy2] - Potential[N - Sy2]) * GridRatioY / 2;
-    if (k > 0 && k < Z - 1) {
-      gz = G * dt;
-    } else {
-      gz = 0.0;
-    }
+    gz = G * dt;
+    
     Nf = 8*(i*Sx + j*Sy + k*Sz);
     N = 3*(i*Sx + j*Sy + k*Sz);
     Source[Nf+0] = 0.;
